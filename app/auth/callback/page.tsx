@@ -1,9 +1,9 @@
 "use client";
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-export default function AuthCallback() {
+function AuthCallbackInner() {
   const router = useRouter();
   const params = useSearchParams();
 
@@ -36,5 +36,19 @@ export default function AuthCallback() {
     <div style={{ height: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-0)", color: "var(--fg-2)", fontFamily: "var(--mono)", fontSize: 13, letterSpacing: "0.1em" }}>
       SIGNING IN…
     </div>
+  );
+}
+
+export default function AuthCallback() {
+  return (
+    <Suspense
+      fallback={
+        <div style={{ height: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-0)", color: "var(--fg-2)", fontFamily: "var(--mono)", fontSize: 13, letterSpacing: "0.1em" }}>
+          SIGNING IN…
+        </div>
+      }
+    >
+      <AuthCallbackInner />
+    </Suspense>
   );
 }

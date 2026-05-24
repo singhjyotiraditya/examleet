@@ -16,6 +16,9 @@ node_modules/.prisma/
 # OS
 .DS_Store
 
+# TypeScript
+*.tsbuildinfo
+
 # Logs
 *.log
 npm-debug.log*

@@ -69,7 +69,7 @@ export async function getRegistration(contestId: string, userId: string) {
 export async function getLeaderboard(contestId: string) {
   return prisma.contestRegistration.findMany({
     where: { contestId, finalRank: { not: null } },
-    include: { user: { select: { id: true, name: true, state: true } } },
+    include: { user: { select: { id: true, name: true, city: true } } },
     orderBy: { finalRank: "asc" },
     take: 100,
   });

@@ -10,7 +10,7 @@ export async function findById(id: string) {
           question: {
             select: {
               id: true, subject: true, chapter: true, difficulty: true,
-              questionText: true, type: true, options: true,
+              title: true, body: true, options: true,
             },
           },
         },
