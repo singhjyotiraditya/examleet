@@ -21,10 +21,7 @@ function AuthCallbackInner() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${access_token}`,
         },
-        body: JSON.stringify({
-          name: user.user_metadata?.full_name || user.user_metadata?.name || "",
-          email: user.email,
-        }),
+        body: JSON.stringify({ email: user.email }),
       });
 
       router.replace("/");

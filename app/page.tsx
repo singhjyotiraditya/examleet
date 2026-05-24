@@ -143,15 +143,14 @@ export default function Page() {
 
   function applySession(session: { user: { email?: string; user_metadata?: Record<string, string>; created_at: string }; access_token: string }) {
     const u = session.user;
-    const name = u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split("@")[0] || "";
-    setAuth({ name, email: u.email ?? "", method: "google", signedUpAt: u.created_at });
+    setAuth({ name: "", email: u.email ?? "", method: "google", signedUpAt: u.created_at });
 
     const token = session.access_token;
 
     const syncUser = () => fetch("/api/auth/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-      body: JSON.stringify({ name, email: u.email }),
+      body: JSON.stringify({ email: u.email }),
     });
 
     fetch("/api/me", { headers: { Authorization: `Bearer ${token}` } })
@@ -170,8 +169,20 @@ export default function Page() {
         }
         const p = json.data;
         setProfileData(p);
+        setAuth(a => ({
+          ...a!,
+          name: (p.name as string) || a?.name || "",
+          city: (p.city as string) || "",
+        }));
         if (p.examType) {
-          const onb = { exam: p.examType, currentLevel: p.currentLevel, targetYear: p.targetYear, dailyMinutes: p.dailyGoalMinutes };
+          const onb = {
+            exam: p.examType,
+            currentLevel: p.currentLevel,
+            targetYear: p.targetYear,
+            dailyMinutes: p.dailyGoalMinutes,
+            name: p.name,
+            city: p.city,
+          };
           setOnboardData(onb);
           try { localStorage.setItem(ONBOARD_KEY, JSON.stringify(onb)); } catch { }
         } else {
@@ -204,20 +215,40 @@ export default function Page() {
     setNeedsOnboarding(false);
     setAuthReason(null);
 
-    // Persist onboarding to DB
+    const displayName = String(answers.name ?? "").trim();
+
+    // Persist onboarding profile + unique handle from chosen name
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) return;
       fetch("/api/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` },
         body: JSON.stringify({
+          name: displayName,
+          city: String(answers.city ?? "").trim(),
           examType: answers.exam,
           targetYear: answers.targetYear,
           currentLevel: answers.currentLevel,
           dailyGoalMinutes: answers.dailyMinutes,
+          generateHandleFromName: displayName.length >= 2,
         }),
-      }).catch(() => null);
+      })
+        .then(r => (r.ok ? r.json() : null))
+        .then(json => {
+          if (!json?.data) return;
+          setProfileData(json.data);
+          setAuth(a => ({
+            ...a!,
+            name: json.data.name as string,
+            city: (json.data.city as string) || "",
+          }));
+        })
+        .catch(() => null);
     });
+
+    if (displayName.length >= 2) {
+      setAuth(a => (a ? { ...a, name: displayName, city: String(answers.city ?? "").trim() } : a));
+    }
 
     pendingSuccessRef.current?.();
     pendingSuccessRef.current = null;
@@ -324,18 +355,23 @@ export default function Page() {
   const user = useMemo(() => {
     if (!auth) return null;
     const p = profileData as Record<string, unknown> | null;
+    const examType = (p?.examType as string) || (onboardData?.exam as string) || null;
+    const targetYear = (p?.targetYear as number) ?? (onboardData?.targetYear as number) ?? null;
+    const currentLevel = (p?.currentLevel as string) || (onboardData?.currentLevel as string) || null;
+    const dailyGoalMinutes = (p?.dailyGoalMinutes as number) ?? (onboardData?.dailyMinutes as number) ?? 120;
+
     return {
-      name: auth.name || (p?.name as string) || "",
+      name: (p?.name as string) || auth.name || "",
       email: auth.email,
-      city: auth.city || (p?.city as string) || "",
-      handle: p?.handle as string || (auth.email ? "@" + auth.email.split("@")[0].toLowerCase().replace(/[^a-z0-9._]/g, "") : ""),
+      city: (p?.city as string) || auth.city || "",
+      handle: (p?.handle as string) || "",
       joined: auth.signedUpAt ? formatJoinDate(auth.signedUpAt) : "",
       authMethod: auth.method,
-      target: (onboardData?.exam as string) ? buildTargetLabel(onboardData!) : "",
-      examType: (onboardData?.exam as string) || (p?.examType as string) || null,
-      currentLevel: (onboardData?.currentLevel as string) || (p?.currentLevel as string) || null,
-      targetYear: (onboardData?.targetYear as number) || (p?.targetYear as number) || null,
-      dailyGoalMinutes: (onboardData?.dailyMinutes as number) || (p?.dailyGoalMinutes as number) || 120,
+      target: examType ? buildTargetLabel({ exam: examType, targetYear, currentLevel }) : "",
+      examType,
+      currentLevel,
+      targetYear,
+      dailyGoalMinutes,
       rating: (p?.rating as number) || 1200,
       rank: (p?.rankAllIndia as number) || "—",
       delta: ((rd: number) => rd >= 0 ? `+${rd}` : `${rd}`)((p?.ratingDelta as number) ?? 0),
@@ -345,7 +381,7 @@ export default function Page() {
       streak: (p?.streakCurrent as number) || 0,
       streakMax: (p?.streakMax as number) || 0,
       todayMinutes: 0,
-      weeklyGoal: (onboardData?.dailyMinutes as number || p?.dailyGoalMinutes as number || 120) * 7,
+      weeklyGoal: dailyGoalMinutes * 7,
       weeklyDone: 0,
       badges: ((p?.userBadges as Array<{badge: {type: string}}>)?.map(ub => ub.badge.type) ?? []) as string[],
       mastery: [],
@@ -398,7 +434,25 @@ export default function Page() {
       case "profile":
         return isGuest
           ? <GuestGate reasonKey="profile" onSignIn={() => setAuthReason(AUTH_REASONS.profile)} />
-          : <Profile user={user} onSignOut={resetAll} isDesktop={isDesktop} />;
+          : (
+            <Profile
+              user={user}
+              onSignOut={resetAll}
+              isDesktop={isDesktop}
+              onProfileUpdated={data => {
+                setProfileData(data);
+                setOnboardData({
+                  exam: data.examType,
+                  currentLevel: data.currentLevel,
+                  targetYear: data.targetYear,
+                  dailyMinutes: data.dailyGoalMinutes,
+                  name: data.name,
+                  city: data.city,
+                });
+                setAuth(a => (a ? { ...a, name: data.name as string, city: (data.city as string) || "" } : a));
+              }}
+            />
+          );
       default:
         return null;
     }

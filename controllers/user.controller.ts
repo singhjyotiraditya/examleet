@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import * as UserService from "@/services/user.service";
 import * as ActivityService from "@/services/activity.service";
 import { requireAuth } from "@/lib/auth";
+import { generateUniqueHandle } from "@/lib/handle";
 import * as R from "@/lib/response";
 
 export async function getMe(req: NextRequest) {
@@ -28,16 +30,33 @@ export async function updateMe(req: NextRequest) {
     if (error) return R.unauthorized();
 
     const body = await req.json();
-    const { name, city, examType, targetYear, currentLevel, dailyGoalMinutes } = body;
+    const {
+      name,
+      city,
+      examType,
+      targetYear,
+      currentLevel,
+      dailyGoalMinutes,
+      generateHandleFromName,
+    } = body;
 
-    const updated = await UserService.update(user.id, {
-      ...(name !== undefined && { name }),
-      ...(city !== undefined && { city }),
+    const existing = await UserService.findById(user.id);
+    if (!existing) return R.notFound("User");
+
+    const patch: Prisma.UserUpdateInput = {
+      ...(name !== undefined && { name: String(name).trim() }),
+      ...(city !== undefined && { city: String(city).trim() }),
       ...(examType !== undefined && { examType }),
-      ...(targetYear !== undefined && { targetYear }),
+      ...(targetYear !== undefined && { targetYear: Number(targetYear) }),
       ...(currentLevel !== undefined && { currentLevel }),
-      ...(dailyGoalMinutes !== undefined && { dailyGoalMinutes }),
-    });
+      ...(dailyGoalMinutes !== undefined && { dailyGoalMinutes: Number(dailyGoalMinutes) }),
+    };
+
+    if (generateHandleFromName && typeof name === "string" && name.trim().length >= 2) {
+      patch.handle = await generateUniqueHandle(name.trim(), user.id);
+    }
+
+    const updated = await UserService.update(user.id, patch);
     return R.ok(updated);
   } catch (e) {
     return R.serverError(e);
