@@ -1,0 +1,370 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// USER
+// ─────────────────────────────────────────────
+// Populated from auth (Supabase) + onboarding flow.
+// handle, name, city come from onboarding; email/phone from auth.
+model User {
+  id               String   @id @default(uuid()) @db.Uuid
+  email            String?  @unique
+  phone            String?  @unique                     // for phone-OTP auth
+  authMethod       String   @default("google")          // "google" | "phone"
+  name             String   @default("")
+  handle           String   @unique @default("")        // @ananya.s — derived from email prefix
+  city             String   @default("")
+  // Onboarding answers
+  examType         String?  @map("exam_type")           // "mains" | "adv" | "neet"
+  currentLevel     String?  @map("current_level")       // "dropper" | "12th" | "11th"
+  targetYear       Int?     @map("target_year")
+  dailyGoalMinutes Int      @default(120) @map("daily_goal_minutes")
+  // Rating & rank (updated after each contest)
+  rating           Int      @default(1200)
+  ratingDelta      Int      @default(0) @map("rating_delta")  // last change, for "+86" display
+  rankAllIndia     Int?     @map("rank_all_india")
+  // Streak (maintained by DailyActivity upsert)
+  streakCurrent    Int      @default(0) @map("streak_current")
+  streakMax        Int      @default(0) @map("streak_max")
+  // Totals (denormalised for fast dashboard reads)
+  totalSolved      Int      @default(0) @map("total_solved")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  attempts               Attempt[]
+  bookmarks              Bookmark[]
+  contestRegistrations   ContestRegistration[]
+  specialEventRegs       SpecialEventRegistration[]
+  dailyActivities        DailyActivity[]
+  ratingHistory          RatingHistory[]
+  userBadges             UserBadge[]
+  userSetProgress        UserSetProgress[]
+  communityNotes         CommunityNote[]
+  communityNoteUpvotes   CommunityNoteUpvote[]
+
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────
+// QUESTION (PYQ bank)
+// ─────────────────────────────────────────────
+// `options` stored as [{id:"a",text:"..."}, …]
+// `correct` is the single winning option id ("a"/"b"/"c"/"d")
+//   — for multi-correct, store as JSON array in correctOptions instead
+// `solution` stored as string[] (step-by-step lines)
+// `tags` stored as string[] (["PYQ","Aldol","Named Reaction"])
+// `figure` stored as {caption:string} or null
+model Question {
+  id             String  @id @default(uuid()) @db.Uuid
+  code           String  @unique                       // "JEE-A-2024-P-12"
+  title          String                               // short display title
+  exam           String                               // "JEE Advanced 2024"
+  year           Int
+  paperNo        Int?    @map("paper_no")             // 1 or 2 for JEE Adv
+  subject        String                               // "phy" | "chem" | "math" | "bio"
+  chapter        String
+  topic          String?
+  difficulty     String                               // "Easy" | "Medium" | "Hard"
+  body           String  @map("question_text")        // full LaTeX-safe question text
+  figure         Json?                                // {caption: string} | null
+  options        Json                                 // [{id:"a",text:"…"}, …]
+  correct        String                               // "a" | "b" | "c" | "d"
+  correctOptions Json?   @map("correct_options")      // for multi-correct questions
+  solution       Json    @map("solution_steps")       // string[] of step explanations
+  tags           Json    @default("[]")               // string[]
+  // Stats (updated on each Attempt write)
+  marksCorrect   Int     @default(4) @map("marks_correct")
+  marksWrong     Int     @default(-1) @map("marks_wrong")
+  attemptCount   Int     @default(0) @map("attempt_count")
+  correctCount   Int     @default(0) @map("correct_count")
+  avgTimeSec     Int?    @map("avg_time_sec")         // rolling average
+  verified       Boolean @default(false)
+
+  hints               Hint[]
+  attempts            Attempt[]
+  bookmarks           Bookmark[]
+  problemSetQuestions ProblemSetQuestion[]
+  communityNotes      CommunityNote[]
+
+  @@map("questions")
+}
+
+// Progressive hints — up to 3 levels per question (orderIndex 1/2/3)
+model Hint {
+  id         String @id @default(uuid()) @db.Uuid
+  questionId String @map("question_id") @db.Uuid
+  orderIndex Int    @map("order_index")     // 1 = nudge, 2 = key idea, 3 = full hint
+  hintText   String @map("hint_text")
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, orderIndex])
+  @@map("hints")
+}
+
+// ─────────────────────────────────────────────
+// ATTEMPT (practice + contest sessions)
+// ─────────────────────────────────────────────
+model Attempt {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  questionId     String   @map("question_id") @db.Uuid
+  contestId      String?  @map("contest_id") @db.Uuid
+  selectedOption String?  @map("selected_option")     // "a" | "b" | "c" | "d"
+  numericalInput Float?   @map("numerical_input")
+  isCorrect      Boolean  @map("is_correct")
+  timeTakenSec   Int?     @map("time_taken_sec")
+  sessionType    String   @default("practice") @map("session_type") // "practice" | "contest"
+  attemptedAt    DateTime @default(now()) @map("attempted_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id])
+  contest  Contest? @relation(fields: [contestId], references: [id])
+
+  @@map("attempts")
+}
+
+// ─────────────────────────────────────────────
+// BOOKMARK
+// ─────────────────────────────────────────────
+model Bookmark {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  questionId String   @map("question_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, questionId])
+  @@map("bookmarks")
+}
+
+// ─────────────────────────────────────────────
+// PROBLEM SET
+// ─────────────────────────────────────────────
+model ProblemSet {
+  id             String   @id @default(uuid()) @db.Uuid
+  name           String
+  subject        String                   // "phy" | "chem" | "math" | "bio" | "mixed"
+  chapter        String?
+  description    String   @default("")
+  difficulty     String?                  // "Easy" | "Medium" | "Hard" | null = mixed
+  totalQuestions Int      @default(0) @map("total_questions")
+  isFeatured     Boolean  @default(false) @map("is_featured")
+  isCurated      Boolean  @default(true)  @map("is_curated")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  questions    ProblemSetQuestion[]
+  userProgress UserSetProgress[]
+
+  @@map("problem_sets")
+}
+
+model ProblemSetQuestion {
+  setId      String @map("set_id") @db.Uuid
+  questionId String @map("question_id") @db.Uuid
+  orderIndex Int    @map("order_index")
+
+  set      ProblemSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  question Question   @relation(fields: [questionId], references: [id])
+
+  @@id([setId, questionId])
+  @@map("problem_set_questions")
+}
+
+model UserSetProgress {
+  userId          String    @map("user_id") @db.Uuid
+  setId           String    @map("set_id") @db.Uuid
+  solvedCount     Int       @default(0) @map("solved_count")
+  correctCount    Int       @default(0) @map("correct_count")
+  completed       Boolean   @default(false)
+  lastAttemptedAt DateTime? @map("last_attempted_at")
+
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  set  ProblemSet @relation(fields: [setId], references: [id])
+
+  @@id([userId, setId])
+  @@map("user_set_progress")
+}
+
+// ─────────────────────────────────────────────
+// CONTEST
+// ─────────────────────────────────────────────
+// type: "Mock" | "Sprint" | "Speedrun" | "Tournament"
+// status: "upcoming" | "live" | "past"
+// badge: display label shown on card e.g. "FREE" | "OPEN" | "PRIME"
+model Contest {
+  id             String   @id @default(uuid()) @db.Uuid
+  name           String
+  type           String                           // "Mock" | "Sprint" | "Speedrun" | "Tournament"
+  examType       String   @map("exam_type")       // "jee_mains" | "jee_adv" | "neet" | "mixed"
+  subjects       Json                             // string[] of subject ids
+  startsAt       DateTime @map("starts_at")
+  durationMin    Int      @map("duration_min")
+  totalQuestions Int      @map("total_questions")
+  maxScore       Int      @map("max_score")       // e.g. 300 for JEE Mains style
+  status         String   @default("upcoming")    // "upcoming" | "live" | "past"
+  isHot          Boolean  @default(false) @map("is_hot")    // featured / happening today
+  badge          String   @default("FREE")        // "FREE" | "OPEN" | "PRIME"
+  participantCount Int    @default(0) @map("participant_count")
+
+  registrations ContestRegistration[]
+  attempts      Attempt[]
+
+  @@map("contests")
+}
+
+model ContestRegistration {
+  contestId    String    @map("contest_id") @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  finalRank    Int?      @map("final_rank")
+  score        Int?
+  totalTimeSec Int?      @map("total_time_sec")
+  registeredAt DateTime  @default(now()) @map("registered_at")
+  completedAt  DateTime? @map("completed_at")
+
+  contest Contest @relation(fields: [contestId], references: [id])
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([contestId, userId])
+  @@map("contest_registrations")
+}
+
+// ─────────────────────────────────────────────
+// SPECIAL EVENT
+// ─────────────────────────────────────────────
+// Long-running events like 100-day sprints, city rivalries, themed olympiads.
+// type: "series" | "rivalry" | "theme"
+model SpecialEvent {
+  id           String   @id @default(uuid()) @db.Uuid
+  type         String                           // "series" | "rivalry" | "theme"
+  title        String
+  description  String
+  reward       String                           // display string e.g. "Sprint Badge + Mentorship"
+  color        String                           // CSS var e.g. "var(--accent)"
+  startsAt     DateTime @map("starts_at")
+  endsAt       DateTime @map("ends_at")
+  isActive     Boolean  @default(true) @map("is_active")
+  participantCount Int  @default(0) @map("participant_count")
+
+  registrations SpecialEventRegistration[]
+
+  @@map("special_events")
+}
+
+model SpecialEventRegistration {
+  eventId      String   @map("event_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  joinedAt     DateTime @default(now()) @map("joined_at")
+  disqualified Boolean  @default(false)
+  missedDays   Int      @default(0) @map("missed_days")
+
+  event SpecialEvent @relation(fields: [eventId], references: [id])
+  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId])
+  @@map("special_event_registrations")
+}
+
+// ─────────────────────────────────────────────
+// ACTIVITY & RATING HISTORY
+// ─────────────────────────────────────────────
+// One row per user per calendar date — drives the year heatmap and streak logic.
+// level: 0–4, maps directly to heatmap cell colour (0 = inactive, 4 = max)
+model DailyActivity {
+  userId         String   @map("user_id") @db.Uuid
+  activityDate   DateTime @map("activity_date") @db.Date
+  questionsSolved Int     @default(0) @map("questions_solved")
+  correctCount   Int      @default(0) @map("correct_count")
+  timeSpentSec   Int      @default(0) @map("time_spent_sec")
+  level          Int      @default(0)  // 0–4 for heatmap, computed from questionsSolved
+  streakDay      Int      @default(0) @map("streak_day")   // running streak on this day
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, activityDate])
+  @@map("daily_activity")
+}
+
+// Snapshot of rating after each rated event (contest finish).
+// Powers the rating graph on the Profile screen.
+model RatingHistory {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  rating    Int
+  delta     Int                               // +/- change from this event
+  contestId String?  @map("contest_id")      // nullable — could be from admin adjustment
+  recordedAt DateTime @default(now()) @map("recorded_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("rating_history")
+}
+
+// ─────────────────────────────────────────────
+// BADGES & ACHIEVEMENTS
+// ─────────────────────────────────────────────
+// conditionType drives automatic award logic, e.g.:
+//   "streak_days" conditionValue=47 → award when streakCurrent >= 47
+//   "contest_rank" conditionValue=1  → award on any contest rank-1 finish
+//   "correct_count" conditionValue=500 → award when totalSolved >= 500
+model Badge {
+  id             String @id @default(uuid()) @db.Uuid
+  name           String @unique
+  emoji          String                          // "🔥"
+  label          String                          // "47-day streak" — full display label
+  description    String
+  conditionType  String @map("condition_type")
+  conditionValue Int    @map("condition_value")
+
+  userBadges UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  userId   String   @map("user_id") @db.Uuid
+  badgeId  String   @map("badge_id") @db.Uuid
+  earnedAt DateTime @default(now()) @map("earned_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id])
+
+  @@id([userId, badgeId])
+  @@map("user_badges")
+}
+
+// ─────────────────────────────────────────────
+// COMMUNITY NOTES
+// ─────────────────────────────────────────────
+model CommunityNote {
+  id          String   @id @default(uuid()) @db.Uuid
+  questionId  String   @map("question_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  body        String
+  tag         String?  // "Approach" | "Common mistake" | "Memory tip" | "Question"
+  upvoteCount Int      @default(0) @map("upvote_count")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  question Question              @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  upvotes  CommunityNoteUpvote[]
+
+  @@map("community_notes")
+}
+
+model CommunityNoteUpvote {
+  noteId String @map("note_id") @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  note CommunityNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, userId])
+  @@map("community_note_upvotes")
+}
