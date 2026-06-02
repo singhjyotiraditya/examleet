@@ -411,7 +411,8 @@ export async function addReport(id: string, report: Omit<QuestionReport, "report
   if (!q) return null;
   const existing = Array.isArray(q.reports) ? (q.reports as unknown[]) : [];
   const entry: QuestionReport = { ...report, reportedAt: new Date().toISOString() };
-  await prisma.question.update({ where: { id }, data: { reports: [...existing, entry] } });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await prisma.question.update({ where: { id }, data: { reports: [...existing, entry] as any } });
   return true;
 }
 
