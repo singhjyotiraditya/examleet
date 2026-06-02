@@ -350,6 +350,7 @@ export default function Playground({ problem: initial, onBack, onNext, onPrev, q
                         canSubmit={isNumerical ? !!numericalInput.trim() : !!selected}
                         submitLabel={isPractice ? "Check" : "Submit"}
                         style={{ marginTop: 10 }}
+                        isDesktop
                       />
                     </>
                   ) : (
@@ -932,6 +933,7 @@ function SubmitNextRow({
   canSubmit,
   submitLabel,
   style,
+  isDesktop,
 }: {
   onSubmit: () => void;
   onNext: () => void;
@@ -940,6 +942,7 @@ function SubmitNextRow({
   canSubmit: boolean;
   submitLabel: string;
   style?: React.CSSProperties;
+  isDesktop?: boolean;
 }) {
   const navBtnStyle: React.CSSProperties = {
     flex: 1,
@@ -955,6 +958,40 @@ function SubmitNextRow({
     justifyContent: "center",
     gap: 6,
   };
+
+  if (isDesktop) {
+    return (
+      <div style={{ display: "flex", gap: 8, alignItems: "stretch", ...style }}>
+        {onPrev ? (
+          <button type="button" onClick={onPrev} className="btn" style={{ ...navBtnStyle, flex: "0 0 auto", padding: "14px 20px" }}>
+            <Icons.ArrowLeft size={14} /> Prev
+          </button>
+        ) : (
+          <div style={{ flex: "0 0 auto", width: 88 }} />
+        )}
+        <button
+          type="button"
+          className="btn btn-primary btn-lg"
+          disabled={submitting || !canSubmit}
+          onClick={onSubmit}
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            opacity: canSubmit ? 1 : 0.35,
+            cursor: canSubmit ? "pointer" : "not-allowed",
+            fontSize: 15,
+            padding: "14px 20px",
+          }}
+        >
+          {submitLabel} <Icons.ArrowRight size={16} />
+        </button>
+        <button type="button" onClick={onNext} className="btn" style={{ ...navBtnStyle, flex: "0 0 auto", padding: "14px 20px" }}>
+          Next <Icons.ArrowRight size={14} />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, ...style }}>
       <button
