@@ -86,7 +86,9 @@ export async function getMyActivity(req: NextRequest) {
     const url = new URL(req.url);
     const days = Math.min(Number(url.searchParams.get("days") ?? 90), 365);
     const activity = await ActivityService.getActivity(user.id, days);
-    return R.ok(activity);
+    const res = R.ok(activity);
+    res.headers.set("Cache-Control", "private, max-age=300");
+    return res;
   } catch (e) {
     return R.serverError(e);
   }

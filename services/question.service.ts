@@ -353,13 +353,24 @@ export async function getPYQStats(userId?: string): Promise<PYQStatsPayload> {
   return { subjects, solvedPyqs, attemptedPyqs };
 }
 
+// Cache the base fresh-feed questions (no user progress) — same for all users
+const getCachedFreshFeed = unstable_cache(
+  async () => {
+    const result = await findMany({ year: 2024, limit: 12 });
+    return result.items;
+  },
+  ["fresh-feed-2024"],
+  { revalidate: 3600 }
+);
+
 export async function getForYouFeed(userId?: string) {
   const { subjects, solvedPyqs, attemptedPyqs } = await getPYQStats(userId);
   const primary = computeForYouPrimary(subjects, solvedPyqs, attemptedPyqs);
   const mode = forYouFeedMode(attemptedPyqs);
 
-  const freshResult = await findMany({ year: 2024, limit: 12, userId });
-  const fresh = freshResult.items.filter(q => !(q as { solved?: boolean }).solved);
+  const freshBase = await getCachedFreshFeed();
+  const freshWithProgress = userId ? await enrichWithUserProgress(freshBase, userId) : freshBase;
+  const fresh = freshWithProgress.filter(q => !(q as { solved?: boolean }).solved);
 
   return {
     primary,

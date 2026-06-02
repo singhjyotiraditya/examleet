@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { unstable_cache } from "next/cache";
 import { enrichWithUserProgress, QUESTION_SELECT } from "./question.service";
 
 /** Deterministic index from calendar day (UTC) — same pick for everyone each day */
@@ -14,21 +15,31 @@ function seededOffset(seed: number, total: number): number {
   return ((s ^ (s >>> 16)) >>> 0) % total;
 }
 
+// Cache the base question per UTC date — same for all users, changes once per day
+const getCachedDailyQuestion = unstable_cache(
+  async (dateStr: string) => {
+    const forDate = new Date(dateStr);
+    const where = { difficulty: { in: ["Medium", "Hard"] } };
+    const total = await prisma.question.count({ where });
+    if (total === 0) return null;
+    const offset = seededOffset(daySeed(forDate), total);
+    const rows = await prisma.question.findMany({
+      where,
+      orderBy: { code: "asc" },
+      skip: offset,
+      take: 1,
+      select: QUESTION_SELECT,
+    });
+    return rows[0] ?? null;
+  },
+  ["daily-pick-question"],
+  { revalidate: 86400 }
+);
+
 /** Today's featured question — Medium or Hard only, stable per UTC day */
 export async function getToday(userId?: string, forDate = new Date()) {
-  const where = { difficulty: { in: ["Medium", "Hard"] } };
-  const total = await prisma.question.count({ where });
-  if (total === 0) return null;
-
-  const offset = seededOffset(daySeed(forDate), total);
-  const rows = await prisma.question.findMany({
-    where,
-    orderBy: { code: "asc" },
-    skip: offset,
-    take: 1,
-    select: QUESTION_SELECT,
-  });
-  const q = rows[0];
+  const dateStr = forDate.toISOString().slice(0, 10);
+  const q = await getCachedDailyQuestion(dateStr);
   if (!q) return null;
 
   if (userId) {

@@ -1,22 +1,26 @@
 import { prisma } from "@/lib/prisma";
+import { unstable_cache } from "next/cache";
 import { Prisma } from "@prisma/client";
 
 export async function findById(id: string) {
   return prisma.contest.findUnique({ where: { id } });
 }
 
+const getCachedContests = unstable_cache(
+  async (status: string, limit: number, offset: number) => {
+    const where: Prisma.ContestWhereInput = status ? { status } : {};
+    const [items, total] = await Promise.all([
+      prisma.contest.findMany({ where, orderBy: { startsAt: "asc" }, take: limit, skip: offset }),
+      prisma.contest.count({ where }),
+    ]);
+    return { items, total, limit, offset };
+  },
+  ["contests-list"],
+  { revalidate: 300 }
+);
+
 export async function findMany(status?: string, limit = 20, offset = 0) {
-  const where: Prisma.ContestWhereInput = status ? { status } : {};
-  const [items, total] = await Promise.all([
-    prisma.contest.findMany({
-      where,
-      orderBy: { startsAt: "asc" },
-      take: limit,
-      skip: offset,
-    }),
-    prisma.contest.count({ where }),
-  ]);
-  return { items, total, limit, offset };
+  return getCachedContests(status ?? "", limit, offset);
 }
 
 export async function create(data: Prisma.ContestCreateInput) {
