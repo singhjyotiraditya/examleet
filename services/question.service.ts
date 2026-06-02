@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { combineSeed, seededShuffle } from "@/lib/seededShuffle";
 import { computeForYouPrimary, forYouFeedMode } from "@/lib/for-you";
 import { Prisma } from "@prisma/client";
+import { unstable_cache } from "next/cache";
 
 export interface QuestionFilters {
   q?: string;
@@ -98,6 +99,7 @@ export async function findMany(filters: QuestionFilters = {}) {
       prisma.question.findMany({
         where: conditions,
         select: { id: true },
+        take: 500,
       }),
     ]);
 
@@ -215,6 +217,36 @@ export async function getStats(subject?: string, userId?: string) {
 
 const HIST_YEARS = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024];
 
+type QuestionGroup = { subject: string; chapter: string; year: number; _count: { id: number } };
+type YearGroup = { year: number; exam: string; _count: { id: number } };
+
+const getCachedQuestionGroups = unstable_cache(
+  async () => {
+    const rows = await prisma.question.groupBy({
+      by: ["subject", "chapter", "year"],
+      _count: { id: true },
+      orderBy: [{ subject: "asc" }, { chapter: "asc" }, { year: "asc" }],
+    });
+    return rows as QuestionGroup[];
+  },
+  ["pyq-question-groups"],
+  { revalidate: 300 }
+);
+
+const getCachedYearGroups = unstable_cache(
+  async () => {
+    const rows = await prisma.question.groupBy({
+      by: ["year", "exam"],
+      _count: { id: true },
+      where: { year: { gte: 2015, lte: 2025 } },
+      orderBy: { year: "desc" },
+    });
+    return rows as YearGroup[];
+  },
+  ["pyq-year-groups"],
+  { revalidate: 300 }
+);
+
 export interface ChapterStat {
   name: string;
   total: number;
@@ -244,11 +276,7 @@ export interface PYQStatsPayload {
 }
 
 export async function getPYQStats(userId?: string): Promise<PYQStatsPayload> {
-  const groups = await prisma.question.groupBy({
-    by: ["subject", "chapter", "year"],
-    _count: { id: true },
-    orderBy: [{ subject: "asc" }, { chapter: "asc" }, { year: "asc" }],
-  });
+  const groups = await getCachedQuestionGroups();
 
   const subjectData: Record<string, Record<string, { total: number; hist: number[] }>> = {};
   for (const g of groups) {
@@ -349,12 +377,7 @@ export interface YearStat {
 }
 
 export async function getPYQYears(userId?: string): Promise<YearStat[]> {
-  const groups = await prisma.question.groupBy({
-    by: ["year", "exam"],
-    _count: { id: true },
-    where: { year: { gte: 2015, lte: 2025 } },
-    orderBy: { year: "desc" },
-  });
+  const groups = await getCachedYearGroups();
 
   const solvedMap: Record<string, number> = {};
   if (userId) {

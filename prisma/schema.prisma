@@ -91,6 +91,10 @@ model Question {
   problemSetQuestions ProblemSetQuestion[]
   communityNotes      CommunityNote[]
 
+  @@index([subject])
+  @@index([subject, chapter])
+  @@index([year, exam])
+  @@index([verified])
   @@map("questions")
 }
 
@@ -126,6 +130,8 @@ model Attempt {
   question Question @relation(fields: [questionId], references: [id])
   contest  Contest? @relation(fields: [contestId], references: [id])
 
+  @@index([userId, questionId])
+  @@index([userId, isCorrect])
   @@map("attempts")
 }
 
@@ -142,6 +148,7 @@ model Bookmark {
   question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@unique([userId, questionId])
+  @@index([userId, questionId])
   @@map("bookmarks")
 }
 
