@@ -25,7 +25,7 @@ export default function AuthCallback() {
         } catch {
           // Sync failure is fine — the homepage's /api/me fallback handles it
         }
-        router.replace("/");
+        router.replace("/app");
       }
     });
 

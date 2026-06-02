@@ -33,7 +33,7 @@ export default async function ProblemPage({ params }: Props) {
   const q = await prisma.question.findUnique({
     where: { code },
     select: {
-      code: true, title: true, subject: true, chapter: true, topic: true,
+      id: true, code: true, title: true, subject: true, chapter: true, topic: true,
       exam: true, year: true, difficulty: true, body: true,
       options: true, correct: true, tags: true,
       attemptCount: true, correctCount: true, verified: true,
@@ -43,7 +43,7 @@ export default async function ProblemPage({ params }: Props) {
   if (!q) notFound();
 
   // Redirect unverified questions to app (may not exist yet)
-  if (!q.verified) redirect(`/?problem=${code}`);
+  if (!q.verified) redirect(`/app?problem=${q.id}`);
 
   const subjectName = SUBJECTS[q.subject as keyof typeof SUBJECTS]?.name ?? q.subject;
   const options = q.options as { id: string; text: string }[];
@@ -146,7 +146,7 @@ export default async function ProblemPage({ params }: Props) {
             Practice this question with AI-guided hints and a step-by-step solution — free on ExamLeet.
           </p>
           <a
-            href={`/?problem=${q.code}`}
+            href={`/app?problem=${q.id}`}
             style={{ display: "inline-block", background: "#2563eb", color: "#fff", fontWeight: 700, fontSize: 15, padding: "13px 28px", borderRadius: 999, textDecoration: "none" }}
           >
             Solve on ExamLeet →
