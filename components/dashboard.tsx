@@ -8,6 +8,15 @@ import { supabase } from "@/lib/supabase";
 import { authFetch } from "@/lib/auth";
 import { appendListSeed } from "@/lib/sessionSeed";
 
+const FRESH_PLACEHOLDERS = [
+  { id: "p1", title: "Motion in a Straight Line", subject: "phy", chapter: "Kinematics", difficulty: "Medium", year: 2024, acceptance: 55 },
+  { id: "p2", title: "Hydrolysis of Esters", subject: "chem", chapter: "Carbonyl Compounds", difficulty: "Hard", year: 2024, acceptance: 38 },
+  { id: "p3", title: "Definite Integration by Parts", subject: "math", chapter: "Integration", difficulty: "Medium", year: 2024, acceptance: 48 },
+  { id: "p4", title: "Electric Field due to Ring", subject: "phy", chapter: "Electrostatics", difficulty: "Easy", year: 2024, acceptance: 62 },
+  { id: "p5", title: "Aldehydes and Ketones", subject: "chem", chapter: "Carbonyl Compounds", difficulty: "Medium", year: 2024, acceptance: 50 },
+  { id: "p6", title: "Limits and Continuity", subject: "math", chapter: "Differential Calculus", difficulty: "Easy", year: 2024, acceptance: 70 },
+];
+
 interface ContestItem {
   id: string; name: string; type: string; startsAt: string; durationMin: number;
   totalQuestions: number; participantCount: number; isHot: boolean; badge: string; status: string;
@@ -67,6 +76,26 @@ function activityToHeatmap(activities: { activityDate: string; questionsSolved: 
   return result;
 }
 
+interface ForYouChapter {
+  name: string; total: number; solved: number; attempted: number; pct: number;
+  accuracyPct: number | null; mastery: string; hist: number[];
+  subjectId: string; subjectName: string;
+}
+
+interface ForYouPrimary {
+  reason: string; chapter: ForYouChapter; badge: string; icon: string;
+  color: string; cta: string; hint: string;
+  progressPct: number | null; progressLabel: string;
+}
+
+interface ForYouData {
+  primary: ForYouPrimary | null;
+  fresh: Array<{ id: string; title: string; subject: string; chapter: string; difficulty: string; year: number; acceptance: number }>;
+  mode: string;
+  solvedPyqs: number;
+  attemptedPyqs: number;
+}
+
 export default function Dashboard({ onOpenProblem, onGoto, user, isGuest, onSignIn, requireAuth, isDesktop }: DashboardProps) {
   const [pod, setPod] = useState<Problem | null>(null);
   const [recentProblems, setRecentProblems] = useState<Problem[]>([]);
@@ -74,6 +103,7 @@ export default function Dashboard({ onOpenProblem, onGoto, user, isGuest, onSign
   const [activityData, setActivityData] = useState<number[]>([]);
   const [todayMinutes, setTodayMinutes] = useState(0);
   const [activeDays, setActiveDays] = useState(new Set<number>());
+  const [forYouData, setForYouData] = useState<ForYouData | null>(null);
 
   const loadDailyPick = () => {
     authFetch("/api/daily-pick")
@@ -85,7 +115,7 @@ export default function Dashboard({ onOpenProblem, onGoto, user, isGuest, onSign
   useEffect(() => {
     loadDailyPick();
 
-    authFetch(`/api/questions?${appendListSeed(new URLSearchParams({ limit: "3" }))}`)
+    authFetch(`/api/questions?${appendListSeed(new URLSearchParams({ limit: "4" }))}`)
       .then(r => r.ok ? r.json() : null)
       .then(json => { if (json?.data?.items) setRecentProblems(json.data.items.map(dbQuestionToProblem)); })
       .catch(() => null);
@@ -93,6 +123,11 @@ export default function Dashboard({ onOpenProblem, onGoto, user, isGuest, onSign
     fetch("/api/contests?status=upcoming&limit=1")
       .then(r => r.ok ? r.json() : null)
       .then(json => { const item = json?.data?.items?.[0]; if (item) setNextContest(item); })
+      .catch(() => null);
+
+    authFetch("/api/questions/for-you")
+      .then(r => r.ok ? r.json() : null)
+      .then(json => { if (json?.data) setForYouData(json.data); })
       .catch(() => null);
   }, []);
 
@@ -193,6 +228,21 @@ export default function Dashboard({ onOpenProblem, onGoto, user, isGuest, onSign
               </button>
             )}
 
+            {/* Quick practice subject shortcuts */}
+            <div>
+              <SectionHeader label="Jump in" sub="Practice by subject" />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginTop: 12 }}>
+                {(["phy", "chem", "math"] as const).map(subj => (
+                  <button key={subj} onClick={() => onGoto("sets")} className="card"
+                    style={{ padding: "16px 12px", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center", border: `1px solid color-mix(in srgb, ${SUBJECTS[subj].color} 20%, transparent)` }}>
+                    <SubjectIcon subject={subj} size={40} />
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{SUBJECTS[subj].name}</div>
+                    <div style={{ fontSize: 11, color: "var(--fg-3)" }}>Browse PYQs</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Subject mastery */}
             {me.mastery.length > 0 && (
               <div>
@@ -221,20 +271,72 @@ export default function Dashboard({ onOpenProblem, onGoto, user, isGuest, onSign
               </div>
             )}
 
-            {/* Pick up where you left */}
-            {recentProblems.length > 0 && (
+            {/* For You recommendation */}
+            {forYouData?.primary && (
               <div>
-                <SectionHeader label="Pick up where you left" action="See all" onAction={() => onGoto("sets")} />
+                <SectionHeader label="Recommended for you" />
+                <button onClick={() => onGoto("sets")} className="card card-elev"
+                  style={{ marginTop: 12, padding: 18, textAlign: "left", width: "100%", display: "flex", alignItems: "center", gap: 16, border: "1px solid color-mix(in srgb, var(--accent) 20%, transparent)", background: "linear-gradient(135deg, color-mix(in srgb, var(--accent) 6%, var(--bg-1)) 0%, var(--bg-1) 80%)" }}>
+                  <div style={{ width: 50, height: 50, borderRadius: 14, background: "var(--accent-soft)", color: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)" }}>
+                    <Icons.Sparkle size={22} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>{isGuest ? "Trending" : "For you"}</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3 }}>{forYouData.primary.chapter.name}</div>
+                    <div style={{ fontSize: 12.5, color: "var(--fg-2)" }}>{forYouData.primary.hint}</div>
+                    <div style={{ fontSize: 11.5, color: "var(--fg-3)", marginTop: 2 }}>{forYouData.primary.progressLabel}</div>
+                  </div>
+                  <Icons.ArrowRight size={18} style={{ color: "var(--accent)", flexShrink: 0 }} />
+                </button>
+              </div>
+            )}
+
+            {/* Pick up where you left */}
+            {isGuest ? (
+              <button onClick={onSignIn} className="card" style={{ padding: "16px 20px", textAlign: "left", width: "100%", display: "flex", alignItems: "center", gap: 16, border: "1px dashed var(--line-2)", background: "transparent" }}>
+                <div style={{ width: 42, height: 42, borderRadius: 12, background: "var(--bg-2)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--fg-3)", flexShrink: 0 }}>
+                  <Icons.Book size={18} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 500, marginBottom: 3 }}>Pick up where you left</div>
+                  <div style={{ fontSize: 12, color: "var(--fg-3)" }}>Sign in to resume your practice history</div>
+                </div>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--accent)", whiteSpace: "nowrap" }}>Sign in →</span>
+              </button>
+            ) : (
+              recentProblems.length > 0 && (
+                <div>
+                  <SectionHeader label="Pick up where you left" action="See all" onAction={() => onGoto("sets")} />
+                  <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    {recentProblems.map(p => (
+                      <button key={p.id} onClick={() => onOpenProblem(p, buildPlayQueue(recentProblems, p.id))} className="card" style={{ padding: 14, textAlign: "left", display: "flex", alignItems: "center", gap: 12 }}>
+                        <SubjectIcon subject={p.subject} size={32} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.title}</div>
+                          <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{p.chapter}</div>
+                        </div>
+                        <DifficultyChip d={p.difficulty} />
+                        <ProblemStatusChip p={p} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            )}
+
+            {/* Fresh 2024 problems */}
+            {forYouData?.fresh && forYouData.fresh.length > 0 && (
+              <div>
+                <SectionHeader label="Fresh from JEE 2024" action="See all" onAction={() => onGoto("sets")} />
                 <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  {recentProblems.map(p => (
-                    <button key={p.id} onClick={() => onOpenProblem(p, buildPlayQueue(recentProblems, p.id))} className="card" style={{ padding: 14, textAlign: "left", display: "flex", alignItems: "center", gap: 12 }}>
-                      <SubjectIcon subject={p.subject} size={32} />
+                  {forYouData.fresh.slice(0, 4).map(q => (
+                    <button key={q.id} onClick={() => onGoto("sets")} className="card" style={{ padding: 14, textAlign: "left", display: "flex", alignItems: "center", gap: 12 }}>
+                      <SubjectIcon subject={q.subject as "phy" | "chem" | "math"} size={32} />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.title}</div>
-                        <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{p.chapter}</div>
+                        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{q.title}</div>
+                        <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{q.chapter}</div>
                       </div>
-                      <DifficultyChip d={p.difficulty} />
-                      <ProblemStatusChip p={p} />
+                      <DifficultyChip d={q.difficulty as "Easy" | "Medium" | "Hard"} />
                     </button>
                   ))}
                 </div>
@@ -292,19 +394,6 @@ export default function Dashboard({ onOpenProblem, onGoto, user, isGuest, onSign
       />
 
       <div className="screen-pad" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {isGuest && (
-          <button onClick={onSignIn} className="card card-elev" style={{ padding: "14px 16px", textAlign: "left", width: "100%", display: "flex", alignItems: "center", gap: 12, border: "1px solid color-mix(in srgb, var(--accent) 25%, transparent)", background: "linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--bg-1)) 0%, var(--bg-1) 70%)" }}>
-            <div style={{ width: 36, height: 36, borderRadius: 12, background: "var(--accent-soft)", color: "var(--accent)", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)", flexShrink: 0 }}>
-              <Icons.Sparkle size={16} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 2 }}>Sign in to track your streak</div>
-              <div style={{ fontSize: 11.5, color: "var(--fg-2)" }}>Save progress, unlock hints, climb the ranks</div>
-            </div>
-            <Icons.ChevronRight size={16} style={{ color: "var(--fg-3)" }} />
-          </button>
-        )}
-
         {/* Hero streak card */}
         <div className="card card-elev" style={{ padding: 18, position: "relative", overflow: "hidden" }}>
           <div className="glow-accent" style={{ position: "absolute", inset: 0, opacity: 0.4, pointerEvents: "none" }} />
@@ -364,12 +453,44 @@ export default function Dashboard({ onOpenProblem, onGoto, user, isGuest, onSign
           </button>
         )}
 
+        {/* Quick practice — subject shortcuts */}
+        <div>
+          <SectionHeader label="Jump in" sub="Practice by subject" />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginTop: 10 }}>
+            {(["phy", "chem", "math"] as const).map(subj => (
+              <button key={subj} onClick={() => onGoto("sets")} className="card"
+                style={{ padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, textAlign: "center", border: `1px solid color-mix(in srgb, ${SUBJECTS[subj].color} 20%, transparent)` }}>
+                <SubjectIcon subject={subj} size={36} />
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--fg-0)" }}>{SUBJECTS[subj].short}</div>
+                <div style={{ fontSize: 10, color: "var(--fg-3)", lineHeight: 1.3 }}>Browse PYQs</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Stats row */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
           <StatTile label="Correct" value={me.correct ?? 0} sub={`/ ${me.solved} attempted`} icon={<Icons.Check size={13} />} />
           <StatTile label="Rating" value={me.rating} sub={me.delta} subColor="var(--easy)" icon={<Icons.TrendingUp size={13} />} />
           <StatTile label="AIR" value={typeof me.rank === "number" ? me.rank.toLocaleString("en-IN") : me.rank} sub={null} icon={<Icons.Medal size={13} />} small />
         </div>
+
+        {/* For You recommendation */}
+        {forYouData?.primary && (
+          <button onClick={() => onGoto("sets")} className="card card-elev"
+            style={{ padding: 16, textAlign: "left", width: "100%", display: "flex", alignItems: "center", gap: 14, border: "1px solid color-mix(in srgb, var(--accent) 20%, transparent)", background: "linear-gradient(135deg, color-mix(in srgb, var(--accent) 6%, var(--bg-1)) 0%, var(--bg-1) 80%)" }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: "var(--accent-soft)", color: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)" }}>
+              <Icons.Sparkle size={20} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>{isGuest ? "Trending" : "For you"}</div>
+              <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 2 }}>{forYouData.primary.chapter.name}</div>
+              <div style={{ fontSize: 11.5, color: "var(--fg-2)" }}>{forYouData.primary.hint}</div>
+              <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 2 }}>{forYouData.primary.progressLabel}</div>
+            </div>
+            <Icons.ArrowRight size={16} style={{ color: "var(--accent)", flexShrink: 0 }} />
+          </button>
+        )}
 
         {/* Subject mastery */}
         {me.mastery.length > 0 && (
@@ -399,22 +520,52 @@ export default function Dashboard({ onOpenProblem, onGoto, user, isGuest, onSign
           </button>
         )}
 
-        {/* Recent problems */}
-        {recentProblems.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <SectionHeader label="Pick up where you left" action="See all" onAction={() => onGoto("sets")} />
-            <div className="card row-divider" style={{ padding: 0 }}>
-              {recentProblems.map(p => (
-                <button key={p.id} onClick={() => onOpenProblem(p, buildPlayQueue(recentProblems, p.id))} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 14px", width: "100%", textAlign: "left" }}>
-                  <SubjectIcon subject={p.subject} size={34} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 500, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--fg-3)" }}>
-                      <span className="mono">{p.code}</span><span>•</span><span>{p.chapter}</span>
+        {/* Pick up where you left */}
+        {isGuest ? (
+          <button onClick={onSignIn} className="card" style={{ padding: "16px 18px", textAlign: "left", width: "100%", display: "flex", alignItems: "center", gap: 14, border: "1px dashed var(--line-2)", background: "transparent" }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: "var(--bg-2)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--fg-3)", flexShrink: 0 }}>
+              <Icons.Book size={17} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2 }}>Pick up where you left</div>
+              <div style={{ fontSize: 11.5, color: "var(--fg-3)" }}>Sign in to track your history</div>
+            </div>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--accent)", whiteSpace: "nowrap" }}>Sign in</span>
+          </button>
+        ) : (
+          recentProblems.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <SectionHeader label="Pick up where you left" action="See all" onAction={() => onGoto("sets")} />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                {recentProblems.map(p => (
+                  <button key={p.id} onClick={() => onOpenProblem(p, buildPlayQueue(recentProblems, p.id))} className="card" style={{ padding: 14, textAlign: "left", display: "flex", alignItems: "center", gap: 10 }}>
+                    <SubjectIcon subject={p.subject} size={32} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 500, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
+                      <div style={{ fontSize: 11, color: "var(--fg-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.chapter}</div>
                     </div>
-                  </div>
-                  <DifficultyChip d={p.difficulty} />
-                  <ProblemStatusChip p={p} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        )}
+
+        {/* Fresh 2024 problems */}
+        {forYouData?.fresh && forYouData.fresh.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <SectionHeader label="Fresh from JEE 2024" action="See all" onAction={() => onGoto("sets")} />
+            <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
+              {forYouData.fresh.slice(0, 6).map(q => (
+                <button key={q.id} onClick={() => {
+                  const p = recentProblems.find(r => r.id === q.id);
+                  if (p) onOpenProblem(p);
+                  else onGoto("sets");
+                }} className="card" style={{ padding: 14, minWidth: 160, maxWidth: 180, flexShrink: 0, textAlign: "left", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <SubjectIcon subject={q.subject as "phy" | "chem" | "math"} size={28} />
+                  <div style={{ fontSize: 12.5, fontWeight: 500, lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{q.title}</div>
+                  <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: "auto" }}>{q.chapter}</div>
+                  <DifficultyChip d={q.difficulty as "Easy" | "Medium" | "Hard"} />
                 </button>
               ))}
             </div>

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Apex — JEE Practice",
+  title: "ExamLeet — JEE Practice",
   description: "AI-guided hints, weekly mocks ranked all-India, and the cleanest practice loop for JEE Mains & Advanced.",
   icons: {
     icon: [{ url: "/logo.png", type: "image/png" }],

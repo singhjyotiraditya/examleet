@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { SUBJECTS } from "@/lib/data";
 import { SubjectIcon, DifficultyChip, FigureSlot, Sparkline, isEquation, MathText, Icons } from "./shared";
 import { authFetch } from "@/lib/auth";
@@ -10,6 +10,7 @@ interface PlaygroundProps {
   problem: Problem;
   onBack: () => void;
   onNext: () => void;
+  onPrev?: () => void;
   queueLabel?: string;
   isGuest: boolean;
   requireAuth: (key: string, cb?: () => void) => boolean;
@@ -19,9 +20,12 @@ interface PlaygroundProps {
   isDailyPick?: boolean;
 }
 
+const REPORT_CATEGORIES = ["Wrong answer", "Typo / Error", "Missing figure", "Bad solution", "Other"] as const;
+type ReportCategory = typeof REPORT_CATEGORIES[number];
+
 interface ApiHint { orderIndex: number; hintText: string; }
 
-export default function Playground({ problem: initial, onBack, onNext, queueLabel, isGuest, requireAuth, isDesktop, userRating = 1200, onFirstSolve, isDailyPick = false }: PlaygroundProps) {
+export default function Playground({ problem: initial, onBack, onNext, onPrev, queueLabel, isGuest, requireAuth, isDesktop, userRating = 1200, onFirstSolve, isDailyPick = false }: PlaygroundProps) {
   const [problem, setProblem] = useState(initial);
   const [pTab, setPTab] = useState<"problem" | "hint" | "solution">("problem");
   const [selected, setSelected] = useState<string | null>(null);
@@ -41,6 +45,8 @@ export default function Playground({ problem: initial, onBack, onNext, queueLabe
   const [submitting, setSubmitting] = useState(false);
   const [previouslyAttempted, setPreviouslyAttempted] = useState(() => initial.solved);
   const [retrying, setRetrying] = useState(() => initial.solved);
+  const [autoSkipMins, setAutoSkipMins] = useState<null | 2 | 3 | 5 | 10>(null);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const isPractice = retrying;
 
@@ -49,6 +55,11 @@ export default function Playground({ problem: initial, onBack, onNext, queueLabe
     const id = setInterval(() => setTimer(t => t + 1), 1000);
     return () => clearInterval(id);
   }, [running, isPractice]);
+
+  useEffect(() => {
+    if (!autoSkipMins || isPractice || submitted) return;
+    if (timer >= autoSkipMins * 60) onNext();
+  }, [timer, autoSkipMins, isPractice, submitted, onNext]);
 
   useEffect(() => {
     setProblem(initial);
@@ -196,7 +207,7 @@ export default function Playground({ problem: initial, onBack, onNext, queueLabe
 
   if (isDesktop) {
     return (
-      <div style={{ minHeight: "100%", background: "var(--bg-0)" }}>
+      <div style={{ minHeight: "100%", background: "var(--bg-0)", position: "relative" }}>
         <div className="pg-desktop">
           {/* LEFT panel: problem statement */}
           <div className="pg-panel">
@@ -219,6 +230,11 @@ export default function Playground({ problem: initial, onBack, onNext, queueLabe
                 <button onClick={() => requireAuth("bookmark", () => setBookmarked(b => !b))} className="btn btn-ghost" style={{ padding: 9, color: bookmarked ? "var(--accent)" : "var(--fg-2)" }}>
                   {bookmarked ? <Icons.BookmarkFill size={16} /> : <Icons.Bookmark size={16} />}
                 </button>
+                <Tooltip text="Report an issue" side="bottom">
+                  <button onClick={() => setReportOpen(true)} className="btn btn-ghost" style={{ padding: 9, color: "var(--fg-3)" }}>
+                    <Icons.Flag size={16} />
+                  </button>
+                </Tooltip>
               </div>
             </div>
 
@@ -259,12 +275,15 @@ export default function Playground({ problem: initial, onBack, onNext, queueLabe
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 {!isPractice && (
-                  <div className="mono" style={{ fontSize: 13, color: running ? "var(--fg-0)" : "var(--fg-3)", padding: "7px 12px", borderRadius: 999, background: "var(--bg-2)", border: "1px solid var(--line-1)", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                    <button onClick={() => setRunning(r => !r)} style={{ display: "inline-flex", color: "var(--fg-2)" }}>
-                      {running ? <Icons.Pause size={12} /> : <Icons.Play size={12} />}
-                    </button>
-                    {fmt(timer)}
-                  </div>
+                  <>
+                    <div className="mono" style={{ fontSize: 13, color: running ? "var(--fg-0)" : "var(--fg-3)", padding: "7px 12px", borderRadius: 999, background: "var(--bg-2)", border: "1px solid var(--line-1)", display: "inline-flex", alignItems: "center", gap: 7 }}>
+                      <button onClick={() => setRunning(r => !r)} style={{ display: "inline-flex", color: "var(--fg-2)" }}>
+                        {running ? <Icons.Pause size={12} /> : <Icons.Play size={12} />}
+                      </button>
+                      {fmt(timer)}
+                    </div>
+                    <AutoSkipButton autoSkipMins={autoSkipMins} timer={timer} onSelect={setAutoSkipMins} fmt={fmt} />
+                  </>
                 )}
                 {isPractice && (
                   <span className="chip chip-mono" style={{ fontSize: 10.5, color: "var(--fg-2)" }}>Practice</span>
@@ -326,9 +345,10 @@ export default function Playground({ problem: initial, onBack, onNext, queueLabe
                       <SubmitNextRow
                         onSubmit={handleSubmit}
                         onNext={onNext}
+                        onPrev={onPrev}
                         submitting={submitting}
                         canSubmit={isNumerical ? !!numericalInput.trim() : !!selected}
-                        submitLabel={isPractice ? "Submit practice attempt" : "Submit answer"}
+                        submitLabel={isPractice ? "Check" : "Submit"}
                         style={{ marginTop: 10 }}
                       />
                     </>
@@ -357,6 +377,7 @@ export default function Playground({ problem: initial, onBack, onNext, queueLabe
             </div>
           </div>
         </div>
+        {reportOpen && <ReportModal problemId={problem.id} onClose={() => setReportOpen(false)} />}
       </div>
     );
   }
@@ -372,18 +393,26 @@ export default function Playground({ problem: initial, onBack, onNext, queueLabe
             </button>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               {!isPractice ? (
-                <div className="mono" style={{ fontSize: 12, color: running ? "var(--fg-1)" : "var(--fg-3)", padding: "7px 11px", borderRadius: 999, background: "var(--bg-2)", border: "1px solid var(--line-1)", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <button onClick={() => setRunning(r => !r)} style={{ display: "inline-flex", color: "var(--fg-2)" }}>
-                    {running ? <Icons.Pause size={12} /> : <Icons.Play size={12} />}
-                  </button>
-                  {fmt(timer)}
-                </div>
+                <>
+                  <div className="mono" style={{ fontSize: 12, color: running ? "var(--fg-1)" : "var(--fg-3)", padding: "7px 11px", borderRadius: 999, background: "var(--bg-2)", border: "1px solid var(--line-1)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <button onClick={() => setRunning(r => !r)} style={{ display: "inline-flex", color: "var(--fg-2)" }}>
+                      {running ? <Icons.Pause size={12} /> : <Icons.Play size={12} />}
+                    </button>
+                    {fmt(timer)}
+                  </div>
+                  <AutoSkipButton autoSkipMins={autoSkipMins} timer={timer} onSelect={setAutoSkipMins} fmt={fmt} />
+                </>
               ) : (
                 <span className="chip chip-mono" style={{ fontSize: 10.5, color: "var(--fg-2)" }}>Practice</span>
               )}
               <button onClick={() => requireAuth("bookmark", () => setBookmarked(b => !b))} className="btn btn-ghost" style={{ padding: 9, color: bookmarked ? "var(--accent)" : "var(--fg-2)" }}>
                 {bookmarked ? <Icons.BookmarkFill size={17} /> : <Icons.Bookmark size={17} />}
               </button>
+              <Tooltip text="Report an issue" side="bottom">
+                <button onClick={() => setReportOpen(true)} className="btn btn-ghost" style={{ padding: 9, color: "var(--fg-3)" }}>
+                  <Icons.Flag size={16} />
+                </button>
+              </Tooltip>
               {queueLabel && (
                 <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{queueLabel}</span>
               )}
@@ -420,7 +449,7 @@ export default function Playground({ problem: initial, onBack, onNext, queueLabe
           </div>
         </div>
 
-        <div style={{ padding: "18px 22px 220px" }} key={pTab}>
+        <div style={{ padding: "18px 18px 240px" }} key={pTab}>
           {pTab === "problem" && <ProblemView problem={problem} selected={selected} onSelect={setSelected} submitted={submitted} revealAnswer={revealAnswer} correct={problem.correct} numericalInput={numericalInput} onNumericalChange={setNumericalInput} />}
           {pTab === "hint" && <HintView problem={problem} hints={hints} loading={hintsLoading} hintLevel={hintLevel} onAdvance={() => setHintLevel(l => Math.min(l + 1, (hints?.length ?? 3) - 1))} onSwitchToSolution={() => setPTab("solution")} submitted={submitted} previouslyAttempted={isPractice} currentGain={ratingPreview?.correct ?? null} nextHintGain={nextHintCorrect} />}
           {pTab === "solution" && <SolutionView problem={problem} steps={solution} loading={solLoading} revealed={solRevealed} onReveal={() => { setSolRevealed(true); loadSolution(); }} />}
@@ -429,16 +458,17 @@ export default function Playground({ problem: initial, onBack, onNext, queueLabe
 
       {/* Action footer */}
       {pTab === "problem" && (
-        <div style={{ position: "absolute", bottom: 88, left: 0, right: 0, padding: "16px 18px 4px", background: "linear-gradient(180deg, transparent, var(--bg-0) 35%)", zIndex: 20, pointerEvents: "none" }}>
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "20px 16px 28px", background: "linear-gradient(180deg, transparent, var(--bg-0) 28%)", zIndex: 20, pointerEvents: "none" }}>
           <div style={{ pointerEvents: "auto" }}>
             {!submitted ? (
               <>
                 {ratingPreview && (
-                  <RatingPreviewBar correct={ratingPreview.correct} wrong={ratingPreview.wrong} hintsUsed={hintLevel} style={{ marginBottom: 8 }} />
+                  <RatingPreviewBar correct={ratingPreview.correct} wrong={ratingPreview.wrong} hintsUsed={hintLevel} style={{ marginBottom: 10 }} />
                 )}
                 <SubmitNextRow
                   onSubmit={handleSubmit}
                   onNext={onNext}
+                  onPrev={onPrev}
                   submitting={submitting}
                   canSubmit={isNumerical ? !!numericalInput.trim() : !!selected}
                   submitLabel={isPractice ? "Submit practice attempt" : "Submit answer"}
@@ -459,6 +489,7 @@ export default function Playground({ problem: initial, onBack, onNext, queueLabe
           </div>
         </div>
       )}
+      {reportOpen && <ReportModal problemId={problem.id} onClose={() => setReportOpen(false)} />}
     </div>
   );
 }
@@ -896,6 +927,7 @@ function CommunitySection({ problem, isGuest, requireAuth }: { problem: Problem;
 function SubmitNextRow({
   onSubmit,
   onNext,
+  onPrev,
   submitting,
   canSubmit,
   submitLabel,
@@ -903,48 +935,369 @@ function SubmitNextRow({
 }: {
   onSubmit: () => void;
   onNext: () => void;
+  onPrev?: () => void;
   submitting: boolean;
   canSubmit: boolean;
   submitLabel: string;
   style?: React.CSSProperties;
 }) {
+  const navBtnStyle: React.CSSProperties = {
+    flex: 1,
+    padding: "11px 16px",
+    fontSize: 13,
+    fontWeight: 600,
+    borderRadius: 999,
+    border: "1px solid var(--line-2)",
+    background: "var(--bg-1)",
+    color: "var(--fg-1)",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  };
   return (
-    <div style={{ display: "flex", gap: 10, alignItems: "stretch", ...style }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, ...style }}>
       <button
         type="button"
         className="btn btn-primary btn-lg"
         disabled={submitting || !canSubmit}
         onClick={onSubmit}
         style={{
-          flex: 1,
-          minWidth: 0,
+          width: "100%",
           justifyContent: "center",
           opacity: canSubmit ? 1 : 0.35,
           cursor: canSubmit ? "pointer" : "not-allowed",
+          fontSize: 15,
+          padding: "14px 20px",
         }}
       >
         {submitLabel} <Icons.ArrowRight size={16} />
       </button>
+      <div style={{ display: "flex", gap: 8 }}>
+        {onPrev ? (
+          <button type="button" onClick={onPrev} className="btn" style={navBtnStyle}>
+            <Icons.ArrowLeft size={14} /> Prev
+          </button>
+        ) : (
+          <div style={{ flex: 1 }} />
+        )}
+        <button type="button" onClick={onNext} className="btn" style={navBtnStyle}>
+          Next <Icons.ArrowRight size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const AUTOSKIP_OPTION_VALUES = [null, 2, 3, 5, 10] as const;
+type AutoSkipVal = null | 2 | 3 | 5 | 10;
+
+function Tooltip({ text, children, side = "bottom" }: {
+  text: string;
+  children: React.ReactNode;
+  side?: "top" | "bottom";
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div
+      style={{ position: "relative", display: "inline-flex" }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      {children}
+      {show && (
+        <div style={{
+          position: "absolute",
+          [side === "bottom" ? "top" : "bottom"]: "calc(100% + 6px)",
+          left: "50%",
+          transform: "translateX(-50%)",
+          background: "var(--fg-0)",
+          color: "var(--bg-0)",
+          fontSize: 10.5,
+          fontFamily: "var(--mono)",
+          padding: "4px 9px",
+          borderRadius: 6,
+          whiteSpace: "nowrap",
+          pointerEvents: "none",
+          zIndex: 300,
+          letterSpacing: "0.01em",
+        }}>
+          {text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AutoSkipButton({ autoSkipMins, timer, onSelect, fmt }: {
+  autoSkipMins: AutoSkipVal;
+  timer: number;
+  onSelect: (v: AutoSkipVal) => void;
+  fmt: (s: number) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const limit = autoSkipMins ? autoSkipMins * 60 : null;
+  const remaining = limit !== null ? Math.max(0, limit - timer) : null;
+  const urgent = remaining !== null && remaining <= 30;
+  const critical = remaining !== null && remaining <= 10;
+
+  const stateColor = critical
+    ? "var(--hard)"
+    : urgent
+    ? "var(--medium)"
+    : autoSkipMins
+    ? "var(--accent)"
+    : "var(--fg-3)";
+
+  return (
+    <div ref={containerRef} style={{ position: "relative", display: "inline-flex" }}>
       <button
         type="button"
-        onClick={onNext}
-        className="btn"
+        onClick={() => setOpen(o => !o)}
         style={{
-          flexShrink: 0,
-          padding: "10px 14px",
-          fontSize: 12.5,
-          fontWeight: 600,
-          borderRadius: 999,
-          border: "1px solid var(--line-2)",
-          background: "var(--bg-1)",
-          color: "var(--fg-1)",
+          padding: "6px 9px",
+          borderRadius: 8,
+          fontSize: 11,
+          color: stateColor,
+          border: `1px solid ${autoSkipMins ? stateColor : open ? "var(--line-3)" : "var(--line-1)"}`,
+          background: autoSkipMins
+            ? `color-mix(in srgb, ${stateColor} 10%, var(--bg-1))`
+            : open ? "var(--bg-2)" : "transparent",
           display: "inline-flex",
           alignItems: "center",
           gap: 4,
+          fontFamily: "var(--mono)",
+          cursor: "pointer",
+          transition: "all .15s",
         }}
       >
-        Next <Icons.ArrowRight size={13} />
+        <Icons.Clock size={12} />
+        <span>
+          {autoSkipMins && remaining !== null ? fmt(remaining) : "auto"}
+        </span>
       </button>
+
+      {open && (
+        <div style={{
+          position: "absolute",
+          top: "calc(100% + 8px)",
+          right: 0,
+          background: "var(--bg-1)",
+          border: "1px solid var(--line-2)",
+          borderRadius: 14,
+          padding: "16px",
+          boxShadow: "0 8px 32px color-mix(in srgb, var(--fg-0) 16%, transparent)",
+          zIndex: 200,
+          minWidth: 220,
+        }}>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg-0)", marginBottom: 3 }}>
+              Auto-skip
+            </div>
+            <div style={{ fontSize: 11, color: "var(--fg-3)", lineHeight: 1.4 }}>
+              Move to next question after this time
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {AUTOSKIP_OPTION_VALUES.map(v => {
+              const active = autoSkipMins === v;
+              return (
+                <button
+                  key={v ?? "off"}
+                  type="button"
+                  onClick={() => { onSelect(v); setOpen(false); }}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontFamily: "var(--mono)",
+                    fontWeight: 600,
+                    border: `1px solid ${active ? "var(--accent)" : "var(--line-2)"}`,
+                    background: active ? "var(--accent-soft)" : "var(--bg-2)",
+                    color: active ? "var(--accent)" : "var(--fg-1)",
+                    cursor: "pointer",
+                    transition: "all .12s",
+                  }}
+                >
+                  {v === null ? "Off" : `${v} min`}
+                </button>
+              );
+            })}
+          </div>
+
+          {autoSkipMins && remaining !== null && (
+            <div style={{
+              marginTop: 12,
+              paddingTop: 12,
+              borderTop: "1px solid var(--line-1)",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 11,
+              fontFamily: "var(--mono)",
+              color: stateColor,
+            }}>
+              <Icons.Clock size={11} />
+              Skips in {fmt(remaining)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReportModal({ problemId, onClose }: { problemId: string; onClose: () => void }) {
+  const [category, setCategory] = useState<ReportCategory | null>(null);
+  const [text, setText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const handleSubmit = async () => {
+    if (!category || submitting) return;
+    setSubmitting(true);
+    try {
+      await authFetch(`/api/questions/${problemId}/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category, text: text.trim() }),
+      });
+      setDone(true);
+    } catch { /* silent */ } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 400,
+        background: "color-mix(in srgb, var(--fg-0) 45%, transparent)",
+        backdropFilter: "blur(4px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 20,
+        animation: "fadeIn .18s ease forwards",
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: "var(--bg-1)",
+          border: "1px solid var(--line-2)",
+          borderRadius: 20,
+          padding: "24px 22px",
+          width: "min(420px, 92vw)",
+          boxShadow: "0 16px 48px color-mix(in srgb, var(--fg-0) 18%, transparent)",
+          animation: "detailIn .25s cubic-bezier(0.16,1,.3,1) forwards",
+        }}
+      >
+        {done ? (
+          <div style={{ textAlign: "center", padding: "16px 0" }}>
+            <div style={{ fontSize: 32, marginBottom: 10 }}>🙏</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--fg-0)", marginBottom: 6 }}>Thanks for reporting</div>
+            <div style={{ fontSize: 13, color: "var(--fg-3)", marginBottom: 20, lineHeight: 1.5 }}>
+              We review every report and fix issues quickly.
+            </div>
+            <button onClick={onClose} className="btn btn-primary" style={{ padding: "10px 28px" }}>Done</button>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "var(--fg-0)", marginBottom: 3 }}>Report an issue</div>
+                <div style={{ fontSize: 12, color: "var(--fg-3)" }}>Help us keep the question bank accurate</div>
+              </div>
+              <button onClick={onClose} className="btn btn-ghost" style={{ padding: 7, color: "var(--fg-3)", borderRadius: 8 }}>
+                <Icons.X size={15} />
+              </button>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--fg-2)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Category</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {REPORT_CATEGORIES.map(c => {
+                  const active = category === c;
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setCategory(c)}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: 8,
+                        fontSize: 12.5,
+                        fontWeight: 500,
+                        border: `1px solid ${active ? "var(--accent)" : "var(--line-2)"}`,
+                        background: active ? "var(--accent-soft)" : "var(--bg-2)",
+                        color: active ? "var(--accent)" : "var(--fg-1)",
+                        cursor: "pointer",
+                        transition: "all .12s",
+                      }}
+                    >
+                      {c}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--fg-2)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Details <span style={{ fontWeight: 400, color: "var(--fg-3)", textTransform: "none", letterSpacing: 0 }}>(optional)</span></div>
+              <textarea
+                value={text}
+                onChange={e => setText(e.target.value)}
+                placeholder="Describe the problem — e.g. the correct answer should be B…"
+                rows={3}
+                style={{
+                  width: "100%",
+                  resize: "none",
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "1px solid var(--line-2)",
+                  background: "var(--bg-2)",
+                  color: "var(--fg-0)",
+                  outline: "none",
+                  boxSizing: "border-box",
+                  fontFamily: "inherit",
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button onClick={onClose} className="btn" style={{ padding: "9px 18px", fontSize: 13 }}>Cancel</button>
+              <button
+                onClick={handleSubmit}
+                disabled={!category || submitting}
+                className="btn btn-primary"
+                style={{ padding: "9px 22px", fontSize: 13, opacity: category ? 1 : 0.4, cursor: category ? "pointer" : "not-allowed" }}
+              >
+                {submitting ? "Sending…" : "Send report"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

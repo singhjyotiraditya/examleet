@@ -111,7 +111,7 @@ export default function Contests({ isGuest, requireAuth, isDesktop }: ContestsPr
               {(() => {
                 const hero = upcoming.find(c => registered.has(c.id)) || upcoming.find(c => c.isHot) || upcoming[0];
                 const rest = upcoming.filter(c => c !== hero);
-                if (!hero) return <div style={{ color: "var(--fg-3)", fontSize: 13, padding: 20 }}>No upcoming contests</div>;
+                if (!hero) return <div style={{ gridColumn: "1 / -1" }}><ContestsComingSoon /></div>;
                 return (
                   <>
                     <NextContestHero contest={hero} registered={registered} onRegister={toggle} onEnter={enterContest} />
@@ -165,7 +165,7 @@ export default function Contests({ isGuest, requireAuth, isDesktop }: ContestsPr
         {tab === "upcoming" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {upcoming.length === 0
-              ? <div style={{ color: "var(--fg-3)", fontSize: 13, padding: 20, textAlign: "center" }}>No upcoming contests</div>
+              ? <ContestsComingSoon />
               : upcoming.map(c => <UpcomingCard key={c.id} contest={c} registered={registered.has(c.id)} onToggle={() => toggle(c.id)} onEnter={() => enterContest(c)} />)}
           </div>
         )}
@@ -353,10 +353,25 @@ function SectionHeader({ label, action }: { label: string; action?: string }) {
   );
 }
 
+function ContestsComingSoon() {
+  return (
+    <div className="contests-soon card">
+      <div className="contests-soon-icon" aria-hidden="true">
+        <Icons.Trophy size={26} />
+      </div>
+      <div className="eyebrow" style={{ color: "var(--accent)", marginBottom: 8 }}>Coming soon</div>
+      <div className="serif contests-soon-title">Weekly mocks are almost here</div>
+      <p className="contests-soon-body">
+        All-India timed contests with live ranks, AIR badges, and authentic JEE scoring — launching soon.
+      </p>
+    </div>
+  );
+}
+
 function LiveContestBanner({ upcomingCount }: { upcomingCount: number }) {
   return (
     <div style={{ padding: 22, background: "linear-gradient(135deg, color-mix(in srgb, var(--accent) 6%, var(--bg-1)) 0%, var(--bg-1) 60%)", border: "1px solid var(--line-2)", borderRadius: 20, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 24 }}>
-      <BannerStat label="Competing this week" value={upcomingCount > 0 ? `${upcomingCount} contests` : "—"} sub="register now" icon={<Icons.Users size={14} />} />
+      <BannerStat label="Competing this week" value={upcomingCount > 0 ? `${upcomingCount} contests` : "Soon"} sub={upcomingCount > 0 ? "register now" : "first mock TBA"} icon={<Icons.Users size={14} />} />
       <BannerStat label="Prize pool" value="Badges" sub="+ merit certificates" icon={<Icons.TrendingUp size={14} />} />
       <BannerStat label="Format" value="JEE" sub="authentic scoring" icon={<Icons.Medal size={14} />} />
       <BannerStat label="Top reward" value="AIR Badge" sub="+ ranking boost" icon={<Icons.Zap size={14} />} />

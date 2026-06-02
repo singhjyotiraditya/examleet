@@ -4,6 +4,7 @@ import { AreaChart, Area, Tooltip, ResponsiveContainer, ReferenceDot } from "rec
 import { SUBJECTS } from "@/lib/data";
 import { AppBar, Avatar, YearHeatmap, BadgeTile, Icons } from "./shared";
 import type { User } from "@/lib/data";
+import PlanEditOverlay from "./plan-edit-overlay";
 import { supabase } from "@/lib/supabase";
 
 const EXAM_NAMES: Record<string, string> = { mains: "JEE Mains", adv: "JEE Advanced" };
@@ -238,7 +239,7 @@ export default function Profile({ user, onSignOut, isDesktop, onProfileUpdated }
         />
         <div className="screen-pad" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <MobileProfileHeader me={me} />
-          {me.examType && <PlanCard me={me} onUpdated={onProfileUpdated} />}
+          {me.examType && <PlanCard me={me} onUpdated={onProfileUpdated} isDesktop={isDesktop} />}
 
           <div className="tabs">
             <button className={`tab${section === "stats" ? " active" : ""}`} onClick={() => setSection("stats")}>Stats</button>
@@ -259,7 +260,7 @@ export default function Profile({ user, onSignOut, isDesktop, onProfileUpdated }
     <div className="dt-container" style={{ maxWidth: 900 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         <MobileProfileHeader me={me} />
-        {me.examType && <PlanCard me={me} onUpdated={onProfileUpdated} />}
+        {me.examType && <PlanCard me={me} onUpdated={onProfileUpdated} isDesktop={isDesktop} />}
 
         <div className="card" style={{ padding: 18 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
@@ -381,105 +382,52 @@ function MobileStat({ label, value, delta, accent, isLast }: { label: string; va
   );
 }
 
-function PlanCard({ me, onUpdated }: { me: User; onUpdated?: (data: Record<string, unknown>) => void }) {
-  const [editing, setEditing] = useState(false);
-  const [exam, setExam] = useState(me.examType || "mains");
-  const [targetYear, setTargetYear] = useState(me.targetYear || 2027);
-  const [currentLevel, setCurrentLevel] = useState(me.currentLevel || "12");
-  const [dailyMinutes, setDailyMinutes] = useState(me.dailyGoalMinutes || 120);
-  const [saving, setSaving] = useState(false);
+function PlanCard({
+  me,
+  onUpdated,
+  isDesktop,
+}: {
+  me: User;
+  onUpdated?: (data: Record<string, unknown>) => void;
+  isDesktop?: boolean;
+}) {
+  const [editOpen, setEditOpen] = useState(false);
 
-  const openEdit = () => {
-    setExam(me.examType || "mains");
-    setTargetYear(me.targetYear || 2027);
-    setCurrentLevel(me.currentLevel || "12");
-    setDailyMinutes(me.dailyGoalMinutes || 120);
-    setEditing(true);
+  const planInitial = {
+    exam: me.examType || "mains",
+    targetYear: me.targetYear || 2027,
+    currentLevel: me.currentLevel || "12",
+    dailyMinutes: me.dailyGoalMinutes || 120,
   };
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const res = await fetch("/api/me", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          examType: exam,
-          targetYear,
-          currentLevel,
-          dailyGoalMinutes: dailyMinutes,
-        }),
-      });
-      const json = await res.json();
-      if (res.ok && json?.data) {
-        onUpdated?.(json.data);
-        setEditing(false);
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (editing) {
-    return (
-      <div className="card" style={{ padding: 14 }}>
-        <div className="eyebrow" style={{ marginBottom: 12 }}>Edit your plan</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <label style={{ fontSize: 11.5, color: "var(--fg-2)" }}>
-            Exam
-            <select value={exam} onChange={e => setExam(e.target.value)} style={{ display: "block", width: "100%", marginTop: 6, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--line-2)", background: "var(--bg-1)", fontSize: 13 }}>
-              <option value="mains">JEE Mains</option>
-              <option value="adv">JEE Advanced</option>
-            </select>
-          </label>
-          <label style={{ fontSize: 11.5, color: "var(--fg-2)" }}>
-            Target year
-            <select value={targetYear} onChange={e => setTargetYear(Number(e.target.value))} style={{ display: "block", width: "100%", marginTop: 6, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--line-2)", background: "var(--bg-1)", fontSize: 13 }}>
-              {[2026, 2027, 2028].map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
-          </label>
-          <label style={{ fontSize: 11.5, color: "var(--fg-2)" }}>
-            Level
-            <select value={currentLevel} onChange={e => setCurrentLevel(e.target.value)} style={{ display: "block", width: "100%", marginTop: 6, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--line-2)", background: "var(--bg-1)", fontSize: 13 }}>
-              <option value="11">Class XI</option>
-              <option value="12">Class XII</option>
-              <option value="drop">Dropper</option>
-            </select>
-          </label>
-          <label style={{ fontSize: 11.5, color: "var(--fg-2)" }}>
-            Daily goal ({dailyMinutes} min)
-            <input type="range" min={30} max={240} step={15} value={dailyMinutes} onChange={e => setDailyMinutes(Number(e.target.value))} style={{ display: "block", width: "100%", marginTop: 8, accentColor: "var(--accent)" }} />
-          </label>
-        </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-          <button type="button" className="btn btn-primary" style={{ flex: 1 }} disabled={saving} onClick={save}>{saving ? "Saving…" : "Save"}</button>
-          <button type="button" className="btn" style={{ border: "1px solid var(--line-2)" }} disabled={saving} onClick={() => setEditing(false)}>Cancel</button>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-      <div style={{ padding: "11px 14px", borderBottom: "1px solid var(--line-1)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <Icons.Target size={13} style={{ color: "var(--accent)" }} />
-          <span style={{ fontSize: 12.5, fontWeight: 600 }}>Your plan</span>
+    <>
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "11px 14px", borderBottom: "1px solid var(--line-1)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <Icons.Target size={13} style={{ color: "var(--accent)" }} />
+            <span style={{ fontSize: 12.5, fontWeight: 600 }}>Your plan</span>
+          </div>
+          <button type="button" onClick={() => setEditOpen(true)} style={{ fontSize: 11, color: "var(--accent)", fontWeight: 600 }}>
+            Edit
+          </button>
         </div>
-        <button type="button" onClick={openEdit} style={{ fontSize: 11, color: "var(--accent)", fontWeight: 600 }}>Edit</button>
+        <div style={{ padding: "4px 14px 12px" }}>
+          <PlanLine k="Exam" v={EXAM_NAMES[me.examType || ""] || "—"} />
+          <PlanLine k="Target year" v={String(me.targetYear || "—")} />
+          <PlanLine k="Level" v={LEVEL_NAMES[me.currentLevel || ""] || "—"} />
+          <PlanLine k="Daily goal" v={`${me.dailyGoalMinutes || 120} min`} last />
+        </div>
       </div>
-      <div style={{ padding: "4px 14px 12px" }}>
-        <PlanLine k="Exam" v={EXAM_NAMES[me.examType || ""] || "—"} />
-        <PlanLine k="Target year" v={String(me.targetYear || "—")} />
-        <PlanLine k="Level" v={LEVEL_NAMES[me.currentLevel || ""] || "—"} />
-        <PlanLine k="Daily goal" v={`${me.dailyGoalMinutes || 120} min`} last />
-      </div>
-    </div>
+
+      <PlanEditOverlay
+        open={editOpen}
+        initial={planInitial}
+        isDesktop={isDesktop}
+        onClose={() => setEditOpen(false)}
+        onSaved={data => onUpdated?.(data)}
+      />
+    </>
   );
 }
 
@@ -724,7 +672,7 @@ function RatingInfoButton() {
       </button>
       {open && (
         <div style={{ position: "fixed", inset: 0, zIndex: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "rgba(0,0,0,0.45)" }} onClick={() => setOpen(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "var(--bg-1)", border: "1px solid var(--line-2)", borderRadius: 20, padding: 24, maxWidth: 420, width: "100%", maxHeight: "80vh", overflowY: "auto", boxShadow: "var(--shadow-lg)" }}>
+          <div onClick={e => e.stopPropagation()} className="scroll-hide" style={{ background: "var(--bg-1)", border: "1px solid var(--line-2)", borderRadius: 20, padding: 24, maxWidth: 420, width: "100%", maxHeight: "80vh", overflowY: "auto", boxShadow: "var(--shadow-lg)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
               <div>
                 <div className="eyebrow" style={{ fontSize: 9.5, marginBottom: 4 }}>How it works</div>

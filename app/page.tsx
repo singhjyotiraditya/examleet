@@ -11,15 +11,15 @@ import {
 } from "@/lib/playQueue";
 import Dashboard from "@/components/dashboard";
 import Playground from "@/components/playground";
-import ProblemSets from "@/components/problem-sets";
+import PYQBrowser from "@/components/pyq-browser";
 import Contests from "@/components/contests";
 import Profile from "@/components/profile";
 import AuthOverlay, { AUTH_REASONS } from "@/components/auth-overlay";
 import { BottomNav, TopNav, ExamLeetMark, Avatar, Icons } from "@/components/shared";
 import SearchModal from "@/components/search-modal";
 
-const AUTH_KEY = "apex_auth_v1";
-const ONBOARD_KEY = "apex_onboarded_v1";
+const AUTH_KEY = "examleet_auth_v1";
+const ONBOARD_KEY = "examleet_onboarded_v1";
 
 type TabId = "home" | "sets" | "contests" | "profile";
 
@@ -66,6 +66,7 @@ export default function Page() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [profileData, setProfileData] = useState<Record<string, unknown> | null>(null);
   const [dailyPickId, setDailyPickId] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const pendingSuccessRef = useRef<(() => void) | null>(null);
   const authDefaultTabAppliedRef = useRef(false);
 
@@ -120,7 +121,7 @@ export default function Page() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) applySession(session);
       applyAuthDefaultTab(!!session);
-    });
+    }).finally(() => setAuthChecked(true));
 
     // Listen for sign-in / sign-out events (fires after OAuth redirect too)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -289,6 +290,19 @@ export default function Page() {
     syncURL(tab, p.id);
   }, [tab]);
 
+  const goToPrevProblem = useCallback(async () => {
+    if (!playQueue || playQueue.index <= 0) return;
+    const prevIndex = playQueue.index - 1;
+    const id = playQueue.ids[prevIndex];
+    const res = await authFetch(`/api/questions/${id}`).catch(() => null);
+    if (!res?.ok) return;
+    const json = await res.json();
+    if (!json?.data) return;
+    setPlayingProblem(dbQuestionToProblem(json.data));
+    setPlayQueue({ ...playQueue, index: prevIndex });
+    syncURL(tab, id);
+  }, [playQueue, tab]);
+
   const goToNextProblem = useCallback(async () => {
     if (!playingProblem) return;
 
@@ -400,6 +414,7 @@ export default function Page() {
           problem={playingProblem!}
           onBack={() => { setPlayingProblem(null); setPlayQueue(null); }}
           onNext={goToNextProblem}
+          onPrev={playQueue && playQueue.index > 0 ? goToPrevProblem : undefined}
           queueLabel={
             playQueue && playQueue.ids.length > 1
               ? `${Math.min(playQueue.index + 1, playQueue.ids.length)} / ${playQueue.ids.length}`
@@ -428,7 +443,7 @@ export default function Page() {
           />
         );
       case "sets":
-        return <ProblemSets onOpenProblem={openProblem} isDesktop={isDesktop} />;
+        return <PYQBrowser onOpenProblem={openProblem} isDesktop={isDesktop} isGuest={isGuest} authReady={authChecked} requireAuth={requireAuth} />;
       case "contests":
         return <Contests isGuest={isGuest} requireAuth={requireAuth} isDesktop={isDesktop} />;
       case "profile":
@@ -488,6 +503,18 @@ export default function Page() {
                   <Icons.Search size={14} />
                   <span>Search</span>
                   <span className="mono" style={{ fontSize: 10, color: "var(--fg-3)", padding: "2px 6px", borderRadius: 5, background: "var(--bg-2)", border: "1px solid var(--line-1)", marginLeft: 4 }}>⌘K</span>
+                </button>
+                {!isGuest && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, height: 40, padding: "0 12px", borderRadius: 999, border: "1px solid var(--line-1)", background: "var(--bg-1)", fontSize: 13, fontWeight: 600, color: "var(--fg-1)" }}>
+                    <Icons.Flame size={15} style={{ color: "var(--accent)" }} />
+                    <span>{user?.streak ?? 0}</span>
+                  </div>
+                )}
+                <button
+                  style={{ width: 40, height: 40, borderRadius: 999, border: "1px solid var(--line-1)", background: "var(--bg-1)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--fg-2)", cursor: "pointer", flexShrink: 0 }}
+                  aria-label="Notifications"
+                >
+                  <Icons.Bell size={16} />
                 </button>
                 {isGuest ? (
                   <button className="btn btn-primary" onClick={() => setAuthReason(AUTH_REASONS.profile)} style={{ padding: "10px 20px", whiteSpace: "nowrap" }}>

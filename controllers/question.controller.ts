@@ -66,6 +66,26 @@ export async function getSolution(req: NextRequest, id: string) {
   }
 }
 
+export async function report(req: NextRequest, id: string) {
+  try {
+    const body = await req.json().catch(() => ({}));
+    const { category, text } = body as { category?: string; text?: string };
+    if (!category) return R.badRequest("category is required");
+
+    let userId: string | undefined;
+    try {
+      const { user, error } = await requireAuth(req);
+      if (!error && user) userId = user.id;
+    } catch { /* anonymous reports allowed */ }
+
+    const ok = await QuestionService.addReport(id, { userId, category: String(category), text: String(text ?? "").trim() });
+    if (!ok) return R.notFound("Question");
+    return R.ok({ reported: true });
+  } catch (e) {
+    return R.serverError(e);
+  }
+}
+
 export async function getHints(req: NextRequest, id: string) {
   try {
     const { user, error } = await requireAuth(req);
@@ -84,11 +104,43 @@ export async function getStats(req: NextRequest) {
   try {
     const url = new URL(req.url);
     const subject = url.searchParams.get("subject") ?? undefined;
-    const data = await QuestionService.getStats(subject);
+    let userId: string | undefined;
+    try {
+      const { user, error } = await requireAuth(req);
+      if (!error && user) userId = user.id;
+    } catch { /* auth optional */ }
+    const data = await QuestionService.getStats(subject, userId);
     return R.ok(data);
   } catch (e) {
     return R.serverError(e);
   }
+}
+
+export async function getPYQStats(req: NextRequest) {
+  try {
+    let userId: string | undefined;
+    try { const { user, error } = await requireAuth(req); if (!error && user) userId = user.id; } catch {}
+    const data = await QuestionService.getPYQStats(userId);
+    return R.ok(data);
+  } catch (e) { return R.serverError(e); }
+}
+
+export async function getForYou(req: NextRequest) {
+  try {
+    let userId: string | undefined;
+    try { const { user, error } = await requireAuth(req); if (!error && user) userId = user.id; } catch {}
+    const data = await QuestionService.getForYouFeed(userId);
+    return R.ok(data);
+  } catch (e) { return R.serverError(e); }
+}
+
+export async function getPYQYears(req: NextRequest) {
+  try {
+    let userId: string | undefined;
+    try { const { user, error } = await requireAuth(req); if (!error && user) userId = user.id; } catch {}
+    const data = await QuestionService.getPYQYears(userId);
+    return R.ok(data);
+  } catch (e) { return R.serverError(e); }
 }
 
 export async function create(req: NextRequest) {

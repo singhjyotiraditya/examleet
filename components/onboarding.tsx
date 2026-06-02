@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { SubjectIcon, Icons } from "./shared";
 import { Field } from "./auth";
 
-const ONBOARD_KEY = "apex_onboarded_v1";
+const ONBOARD_KEY = "examleet_onboarded_v1";
 
 interface OnboardAnswers {
   exam: string | null;
@@ -97,7 +97,7 @@ function StepWelcome() {
         <OnboardHero />
       </div>
       <div style={{ textAlign: "center" }}>
-        <div className="eyebrow" style={{ color: "var(--accent)", marginBottom: 14 }}>★ Apex · v1.0</div>
+        <div className="eyebrow" style={{ color: "var(--accent)", marginBottom: 14 }}>★ ExamLeet · v1.0</div>
         <div className="h-display" style={{ fontSize: 42, marginBottom: 16, lineHeight: 1.1 }}>
           Crack JEE — <em>one question at a time.</em>
         </div>

@@ -306,34 +306,34 @@ export function AppBar({ title, eyebrow, right, display }: {
 // ── Bottom Nav ─────────────────────────────────────────────────────────────
 type TabId = "home" | "sets" | "contests" | "profile";
 
-const NavMarks: Record<TabId, ({ active }: { active: boolean }) => React.ReactElement> = {
-  home: ({ active }) => (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-      <path d="M3 11.5L12 4l9 7.5V20a1 1 0 0 1-1 1h-4v-6h-8v6H4a1 1 0 0 1-1-1z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" fill={active ? "currentColor" : "none"} fillOpacity={active ? 0.12 : 0} />
-      <path d="M3 11.5L12 4l9 7.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+const NavMarks: Record<TabId, () => React.ReactElement> = {
+  home: () => (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9.02 2.84L3.63 7.04C2.73 7.74 2 9.23 2 10.36V17.77C2 20.09 3.89 21.99 6.21 21.99H17.79C20.11 21.99 22 20.09 22 17.78V10.5C22 9.29 21.19 7.74 20.2 7.05L14.02 2.72C12.62 1.74 10.37 1.79 9.02 2.84Z"/>
+      <path d="M12 18V15"/>
     </svg>
   ),
-  sets: ({ active }) => (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-      <rect x="3.5" y="4.5" width="17" height="4" rx="2" stroke="currentColor" strokeWidth="1.6" fill={active ? "currentColor" : "none"} fillOpacity={active ? 0.14 : 0} />
-      <rect x="3.5" y="11" width="17" height="4" rx="2" stroke="currentColor" strokeWidth="1.6" fill={active ? "currentColor" : "none"} fillOpacity={active ? 0.14 : 0} />
-      <rect x="3.5" y="17.5" width="11" height="3" rx="1.5" stroke="currentColor" strokeWidth="1.6" fill={active ? "currentColor" : "none"} fillOpacity={active ? 0.14 : 0} />
+  sets: () => (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.5 19.9V4.1C10.5 2.6 9.86 2 8.27 2H4.23C2.64 2 2 2.6 2 4.1V19.9C2 21.4 2.64 22 4.23 22H8.27C9.86 22 10.5 21.4 10.5 19.9Z"/>
+      <path d="M22 10.9V4.1C22 2.6 21.36 2 19.77 2H15.73C14.14 2 13.5 2.6 13.5 4.1V10.9C13.5 12.4 14.14 13 15.73 13H19.77C21.36 13 22 12.4 22 10.9Z"/>
+      <path d="M22 19.9V18.1C22 16.6 21.36 16 19.77 16H15.73C14.14 16 13.5 16.6 13.5 18.1V19.9C13.5 21.4 14.14 22 15.73 22H19.77C21.36 22 22 21.4 22 19.9Z"/>
     </svg>
   ),
-  contests: ({ active }) => (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-      <path d="M8 4h8v4.5a4 4 0 0 1-8 0z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill={active ? "currentColor" : "none"} fillOpacity={active ? 0.16 : 0} />
-      <path d="M8 5.5H5.5a1.5 1.5 0 0 0 1.5 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M16 5.5h2.5a1.5 1.5 0 0 1-1.5 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M12 12.5V16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      <path d="M8.5 19.5h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      <path d="M9.5 16.5h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  contests: () => (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12.15 16.5V18.6"/>
+      <path d="M7.15 22H17.15V21C17.15 19.9 16.25 19 15.15 19H9.15C8.05 19 7.15 19.9 7.15 21V22Z"/>
+      <path d="M6.15 22H18.15"/>
+      <path d="M12 16C8.13 16 5 12.87 5 9V6C5 3.79 6.79 2 9 2H15C17.21 2 19 3.79 19 6V9C19 12.87 15.87 16 12 16Z"/>
+      <path d="M5.47 11.65C4.72 11.41 4.06 10.97 3.54 10.45C2.64 9.45 2.04 8.25 2.04 6.85C2.04 5.45 3.14 4.35 4.54 4.35H5.19C4.99 4.81 4.89 5.32 4.89 5.85V8.85C4.89 9.85 5.1 10.79 5.47 11.65Z"/>
+      <path d="M18.53 11.65C19.28 11.41 19.94 10.97 20.46 10.45C21.36 9.45 21.96 8.25 21.96 6.85C21.96 5.45 20.86 4.35 19.46 4.35H18.81C19.01 4.81 19.11 5.32 19.11 5.85V8.85C19.11 9.85 18.9 10.79 18.53 11.65Z"/>
     </svg>
   ),
-  profile: ({ active }) => (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.6" fill={active ? "currentColor" : "none"} fillOpacity={active ? 0.14 : 0} />
-      <path d="M4 21c1-4 4.5-7 8-7s7 3 8 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+  profile: () => (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12.16 10.87C12.06 10.86 11.94 10.86 11.83 10.87C9.45 10.79 7.56 8.84 7.56 6.44C7.56 3.99 9.54 2 12 2C14.45 2 16.44 3.99 16.44 6.44C16.43 8.84 14.54 10.79 12.16 10.87Z"/>
+      <path d="M7.16 14.56C4.74 16.18 4.74 18.82 7.16 20.43C9.91 22.27 14.42 22.27 17.17 20.43C19.59 18.81 19.59 16.17 17.17 14.56C14.43 12.73 9.92 12.73 7.16 14.56Z"/>
     </svg>
   ),
 };
@@ -393,7 +393,7 @@ export function SidebarNav({ tab, onChange }: { tab: string; onChange: (t: TabId
 export function TopNav({ tab, onChange }: { tab: string; onChange: (t: TabId) => void }) {
   return (
     <nav className="dt-nav">
-      {NAV_ITEMS.map(it => {
+      {NAV_ITEMS.filter(it => it.id !== "profile").map(it => {
         const active = tab === it.id;
         return (
           <button key={it.id} className={`dt-nav-btn${active ? " active" : ""}`} onClick={() => onChange(it.id)}>
@@ -407,16 +407,17 @@ export function TopNav({ tab, onChange }: { tab: string; onChange: (t: TabId) =>
 }
 
 export function BottomNav({ tab, onChange }: { tab: string; onChange: (t: TabId) => void }) {
+  const idx = NAV_ITEMS.findIndex(it => it.id === tab);
   return (
     <div className="bottom-nav">
       <div className="bottom-nav-inner">
+        <span className="nav-indicator" style={{ "--nav-idx": idx } as React.CSSProperties} />
         {NAV_ITEMS.map(it => {
           const active = tab === it.id;
           const Mark = NavMarks[it.id];
           return (
             <button key={it.id} className={`nav-btn${active ? " active" : ""}`} onClick={() => onChange(it.id)} aria-label={it.label}>
-              <Mark active={active} />
-              <span>{it.label}</span>
+              <Mark />
             </button>
           );
         })}

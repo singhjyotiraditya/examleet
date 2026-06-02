@@ -98,7 +98,7 @@ export default function AuthOverlay({ open, reason, onClose, onAuthed, onboardDa
 }
 
 function SheetBody({ reason, onGoogle, onClose }: { reason: AuthReason | null; onGoogle: () => void; onClose: () => void }) {
-  const { title, body, icon } = reason || { title: "Sign in to continue", body: "Create an account to unlock the full Apex experience.", icon: "lock" };
+  const { title, body, icon } = reason || { title: "Sign in to continue", body: "Create an account to unlock the full ExamLeet experience.", icon: "lock" };
 
   return (
     <div style={{ padding: "20px 22px 28px" }}>
@@ -151,13 +151,15 @@ function Spinner() {
 
 function ReasonIcon({ kind }: { kind: string }) {
   const iconMap: Record<string, React.ReactNode> = {
-    lock: <Icons.Bookmark size={20} />,
+    lock: <Icons.Lock size={20} />,
     hint: <Icons.Lightbulb size={20} />,
     trophy: <Icons.Trophy size={20} />,
     medal: <Icons.Medal size={20} />,
     user: <Icons.User size={20} />,
     bookmark: <Icons.Bookmark size={20} />,
     bolt: <Icons.Bolt size={20} />,
+    book: <Icons.Book size={20} />,
+    calendar: <Icons.Calendar size={20} />,
   };
   return (
     <div style={{ width: 44, height: 44, borderRadius: 14, background: "var(--accent-soft)", color: "var(--accent)", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)" }}>
@@ -174,4 +176,19 @@ export const AUTH_REASONS: Record<string, AuthReason> = {
   profile: { icon: "user", title: "Sign in to track your journey", body: "Streaks, rating, subject mastery, every accepted solution — saved and visualized." },
   solution: { icon: "hint", title: "Sign in to view solutions", body: "Full step-by-step walkthroughs available after sign-in." },
   dailyPick: { icon: "bolt", title: "Sign in for today’s Daily Pick", body: "One curated Medium/Hard question per day with 1.5× rating on your first attempt — sign in to play." },
+  pyqChapters: {
+    icon: "book",
+    title: "Sign in to browse by chapter",
+    body: "See every chapter in Physics, Chemistry & Maths — sorted by weakness, attempts, or A→Z. Track solved PYQs and spot gaps before they cost marks.",
+  },
+  pyqYears: {
+    icon: "calendar",
+    title: "Sign in to browse by year",
+    body: "Open any year from 2015–2024, compare Mains vs Advanced papers, and jump into past JEE questions with your progress saved.",
+  },
+  pyqBrowse: {
+    icon: "lock",
+    title: "Sign in to unlock the full archive",
+    body: "Chapter grids and year-by-year paper breakdowns need an account — your attempts and mastery sync across devices.",
+  },
 };

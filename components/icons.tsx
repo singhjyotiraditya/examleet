@@ -59,3 +59,4 @@ export const Atom = (p: IconProps) => <I {...p}><circle cx="12" cy="12" r="2" />
 export const Leaf = (p: IconProps) => <I {...p}><path d="M11 20A7 7 0 0 1 4 13c0-6 5-10 16-10 0 8-3 17-9 17z" /><path d="M4 20l8-8" /></I>;
 export const Eye = (p: IconProps) => <I {...p}><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" /><circle cx="12" cy="12" r="3" /></I>;
 export const Lock = (p: IconProps) => <I {...p}><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></I>;
+export const Flag = (p: IconProps) => <I {...p}><path d="M4 21V4" /><path d="M4 4h11l-2 5 2 5H4" /></I>;

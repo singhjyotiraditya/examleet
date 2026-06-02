@@ -8,6 +8,7 @@ export interface QuestionListFilters {
   subject?: string;
   difficulty?: string;
   chapter?: string;
+  year?: string;
 }
 
 /** Snapshot of the filtered list order when the user opened a problem. */
@@ -49,5 +50,6 @@ export function filtersToSearchParams(
   if (filters.subject) params.set("subject", filters.subject);
   if (filters.difficulty) params.set("difficulty", filters.difficulty);
   if (filters.chapter) params.set("chapter", filters.chapter);
+  if (filters.year) params.set("year", filters.year);
   return appendListSeed(params);
 }

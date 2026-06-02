@@ -83,6 +83,7 @@ model Question {
   correctCount   Int     @default(0) @map("correct_count")
   avgTimeSec     Int?    @map("avg_time_sec")         // rolling average
   verified       Boolean @default(false)
+  reports        Json    @default("[]")              // [{userId?,category,text,reportedAt}]
 
   hints               Hint[]
   attempts            Attempt[]

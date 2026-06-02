@@ -7,7 +7,7 @@ import { AppBar, SubjectIcon, DifficultyChip, Icons } from "./shared";
 import type { Problem } from "@/lib/data";
 import { buildPlayQueue, type ProblemPlayQueue } from "@/lib/playQueue";
 
-type SubjectStats = Record<string, { total: number; chapters: Record<string, number> }>;
+type SubjectStats = Record<string, { total: number; solved: number; chapters: Record<string, number> }>;
 
 interface ProblemSetItem {
   id: string; name: string; subject: string; chapter: string | null;
@@ -23,15 +23,16 @@ export default function ProblemSets({ onOpenProblem, isDesktop }: { onOpenProble
   const [subj, setSubj] = useState<"all" | SubjectId>("all");
   const [diff, setDiff] = useState<"all" | string>("all");
   const [solveFilter, setSolveFilter] = useState<"all" | "solved" | "unsolved">("unsolved");
+  const [showFilter, setShowFilter] = useState(false);
   const [problems, setProblems] = useState<Problem[]>([]);
   const [problemSets, setProblemSets] = useState<ProblemSetItem[]>([]);
   const [totalProblems, setTotalProblems] = useState(0);
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<SubjectStats>({});
 
-  // Fetch accurate per-subject/chapter counts once — no pagination
+  // Fetch accurate per-subject/chapter counts (includes solved when authed)
   useEffect(() => {
-    fetch("/api/questions/stats")
+    authFetch("/api/questions/stats")
       .then(r => r.ok ? r.json() : null)
       .then(json => { if (json?.data) setStats(json.data); })
       .catch(() => null);
@@ -211,6 +212,7 @@ export default function ProblemSets({ onOpenProblem, isDesktop }: { onOpenProble
           {(Object.values(SUBJECTS) as typeof SUBJECTS[SubjectId][]).map(s => {
             const isSel = subj === s.id;
             const total = stats[s.id]?.total ?? 0;
+            const solved = stats[s.id]?.solved ?? 0;
             return (
               <button key={s.id} onClick={() => setSubj(isSel ? "all" : s.id as SubjectId)} className="card"
                 style={{ padding: 10, textAlign: "left", cursor: "pointer", borderColor: isSel ? `color-mix(in srgb, ${s.color} 60%, transparent)` : "var(--line-1)", background: isSel ? `color-mix(in srgb, ${s.color} 10%, var(--bg-1))` : "var(--bg-1)" }}>
@@ -218,7 +220,7 @@ export default function ProblemSets({ onOpenProblem, isDesktop }: { onOpenProble
                   <SubjectIcon subject={s.id as SubjectId} size={28} />
                   <div>
                     <div style={{ fontSize: 11, color: s.color, fontWeight: 600 }}>{s.short}</div>
-                    <div className="mono" style={{ fontSize: 10, color: "var(--fg-3)", marginTop: 2 }}>0/{total || "··"}</div>
+                    <div className="mono" style={{ fontSize: 10, color: "var(--fg-3)", marginTop: 2 }}>{solved}/{total || "··"}</div>
                   </div>
                 </div>
               </button>
@@ -230,10 +232,33 @@ export default function ProblemSets({ onOpenProblem, isDesktop }: { onOpenProble
           <Icons.Search size={16} style={{ color: "var(--fg-3)" }} />
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search by topic, problem, or code…" style={{ flex: 1, fontSize: 13.5, color: "var(--fg-0)" }} />
           {query && <button onClick={() => setQuery("")} style={{ color: "var(--fg-3)" }}><Icons.X size={14} /></button>}
-          <button onClick={() => setDiff(diff === "all" ? "Easy" : "all")} style={{ color: diff !== "all" ? "var(--accent)" : "var(--fg-2)", padding: 4 }}>
+          <button onClick={() => setShowFilter(v => !v)}
+            style={{ color: (diff !== "all") ? "var(--accent)" : "var(--fg-2)", padding: 4, position: "relative" }}>
             <Icons.Filter size={16} />
+            {diff !== "all" && (
+              <span style={{ position: "absolute", top: 2, right: 2, width: 5, height: 5, borderRadius: "50%", background: "var(--accent)" }} />
+            )}
           </button>
         </div>
+
+        {showFilter && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div>
+              <div className="eyebrow" style={{ marginBottom: 8 }}>Difficulty</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {(["all", "Easy", "Medium", "Hard"] as const).map(d => {
+                  const active = diff === d;
+                  return (
+                    <button key={d} onClick={() => setDiff(d)} className="chip"
+                      style={{ borderColor: active ? "var(--accent)" : "var(--line-2)", background: active ? "var(--accent-soft)" : "var(--bg-2)", color: active ? "var(--accent)" : "var(--fg-1)", cursor: "pointer", fontSize: 11.5, padding: "6px 11px" }}>
+                      {d === "all" ? "All difficulties" : d}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div className="tabs" style={{ flex: 1, maxWidth: 230 }}>
@@ -426,13 +451,60 @@ function ProblemRowDesktop({ p, onClick }: { p: Problem; onClick: () => void }) 
   );
 }
 
+function ChapterTopicCard({
+  chapter,
+  total,
+  subject,
+  onClick,
+  compact,
+}: {
+  chapter: string;
+  total: number;
+  subject: SubjectId;
+  onClick: () => void;
+  compact?: boolean;
+}) {
+  const subjMeta = SUBJECTS[subject];
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="card"
+      style={{
+        padding: 14,
+        textAlign: "left",
+        cursor: "pointer",
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        flexShrink: 0,
+        ...(compact ? { width: 220, minWidth: 220 } : {}),
+      }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3, color: "var(--fg-0)" }}>{chapter}</div>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+        <span className="mono" style={{ fontSize: 11, color: "var(--fg-2)" }}>0/{total}</span>
+        <span className="serif" style={{ fontSize: 16, color: subjMeta.color, lineHeight: 1 }}>
+          0<span style={{ fontSize: 9, color: "var(--fg-3)" }}>%</span>
+        </span>
+      </div>
+      <div className="progress" style={{ height: 4 }}>
+        <div className="progress-fill" style={{ width: "0%", background: subjMeta.color }} />
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", fontSize: 10.5, color: "var(--fg-3)" }}>
+        <Icons.ArrowRight size={11} />
+      </div>
+    </button>
+  );
+}
+
 function TopicBrowse({ stats, subj, onOpenChapter, onViewAll }: {
   stats: SubjectStats; subj: string;
   onOpenChapter: (subject: string, chapter: string) => void;
   onViewAll: (s: SubjectId) => void;
 }) {
   const isAll = subj === "all";
-  const subjects = (isAll ? ["phy", "chem", "math", "bio"] : [subj]) as SubjectId[];
+  const subjects = (isAll ? ["phy", "chem", "math"] : [subj]) as SubjectId[];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
@@ -452,51 +524,60 @@ function TopicBrowse({ stats, subj, onOpenChapter, onViewAll }: {
                 <div style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{chapters.length} chapters · {subjStats.total} problems</div>
               </div>
               {isAll && (
-                <button onClick={() => onViewAll(s)}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: subjMeta.color, fontWeight: 500, padding: "5px 10px", borderRadius: 8, border: `1px solid color-mix(in srgb, ${subjMeta.color} 30%, transparent)`, background: `color-mix(in srgb, ${subjMeta.color} 8%, transparent)`, whiteSpace: "nowrap", flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={() => onViewAll(s)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    fontSize: 12,
+                    color: "var(--fg-3)",
+                    fontWeight: 500,
+                    padding: 0,
+                    border: "none",
+                    background: "none",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                  }}
+                >
                   View all <Icons.ArrowRight size={11} />
                 </button>
               )}
             </div>
 
             {isAll ? (
-              /* Compact one-line horizontal strip of chapter chips */
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, scrollbarWidth: "none" }}>
-                {chapters.map(ch => {
-                  const total = subjStats.chapters[ch];
-                  return (
-                    <button key={ch} onClick={() => onOpenChapter(s, ch)}
-                      style={{ display: "inline-flex", flexDirection: "column", gap: 3, flexShrink: 0, padding: "10px 14px", background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 12, textAlign: "left", cursor: "pointer", minWidth: 140, maxWidth: 200 }}>
-                      <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--fg-0)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{ch}</span>
-                      <span className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)" }}>{total} problems</span>
-                    </button>
-                  );
-                })}
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  overflowX: "auto",
+                  paddingBottom: 4,
+                  scrollbarWidth: "none",
+                }}
+              >
+                {chapters.map(ch => (
+                  <ChapterTopicCard
+                    key={ch}
+                    chapter={ch}
+                    total={subjStats.chapters[ch]}
+                    subject={s}
+                    onClick={() => onOpenChapter(s, ch)}
+                    compact
+                  />
+                ))}
               </div>
             ) : (
-              /* Full grid when a subject is selected */
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
-                {chapters.map(ch => {
-                  const total = subjStats.chapters[ch];
-                  return (
-                    <button key={ch} onClick={() => onOpenChapter(s, ch)} className="card"
-                      style={{ padding: 14, textAlign: "left", cursor: "pointer", display: "flex", flexDirection: "column", gap: 12 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3, color: "var(--fg-0)" }}>{ch}</div>
-                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-                        <span className="mono" style={{ fontSize: 11, color: "var(--fg-2)" }}>0/{total}</span>
-                        <span className="serif" style={{ fontSize: 16, color: subjMeta.color, lineHeight: 1 }}>
-                          0<span style={{ fontSize: 9, color: "var(--fg-3)" }}>%</span>
-                        </span>
-                      </div>
-                      <div className="progress" style={{ height: 4 }}>
-                        <div className="progress-fill" style={{ width: "0%", background: subjMeta.color }} />
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", fontSize: 10.5, color: "var(--fg-3)" }}>
-                        <Icons.ArrowRight size={11} />
-                      </div>
-                    </button>
-                  );
-                })}
+                {chapters.map(ch => (
+                  <ChapterTopicCard
+                    key={ch}
+                    chapter={ch}
+                    total={subjStats.chapters[ch]}
+                    subject={s}
+                    onClick={() => onOpenChapter(s, ch)}
+                  />
+                ))}
               </div>
             )}
           </div>

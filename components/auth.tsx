@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { Icons } from "./shared";
 
-const AUTH_KEY = "apex_auth_v1";
+const AUTH_KEY = "examleet_auth_v1";
 
 interface AuthUser {
   name: string;
