@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const questions = await prisma.question.findMany({
-    where: { verified: true },
     select: { code: true },
   });
 
