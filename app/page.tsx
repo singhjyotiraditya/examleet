@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import s from "./landing.module.css";
 import LandingReveal from "./LandingReveal";
+import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = {
   title: "ExamLeet — Grind PYQs. Climb the All-India rank. Crack JEE.",
@@ -99,7 +100,43 @@ const RankIcon = () => (
   </svg>
 );
 
-export default function LandingPage() {
+function fmt(n: number) {
+  return n.toLocaleString("en-IN");
+}
+function fmtK(n: number) {
+  if (n >= 1000) return `${Math.floor(n / 1000)}k+`;
+  return String(n);
+}
+
+export default async function LandingPage() {
+  const [totalQuestions, yearRange, totalUsers, subjectGroups] = await Promise.all([
+    prisma.question.count({ where: { verified: true } }),
+    prisma.question.aggregate({ _min: { year: true }, _max: { year: true }, where: { verified: true } }),
+    prisma.user.count(),
+    prisma.question.groupBy({
+      by: ["subject", "chapter"],
+      where: { verified: true },
+      _count: { id: true },
+      orderBy: { _count: { id: "desc" } },
+    }),
+  ]);
+
+  const minYear = yearRange._min.year ?? 2013;
+  const maxYear = yearRange._max.year ?? 2024;
+  const yearsSpan = maxYear - minYear + 1;
+
+  const bySubject = (subj: string) => subjectGroups.filter(g => g.subject === subj);
+  const subjStats = (subj: string) => {
+    const rows = bySubject(subj);
+    const problems = rows.reduce((sum, r) => sum + r._count.id, 0);
+    const chapters = rows.length;
+    const topChapters = rows.slice(0, 4).map(r => r.chapter);
+    return { problems, chapters, topChapters };
+  };
+
+  const phy = subjStats("phy");
+  const chem = subjStats("chem");
+  const math = subjStats("math");
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
@@ -137,7 +174,7 @@ export default function LandingPage() {
               <div className={s.heroCopy}>
                 <span className={s.heroPill}>
                   <span className={s.heroPillTag}>JEE MAIN + ADV</span>
-                  12 years of solved PYQs
+                  {yearsSpan} years of solved PYQs
                 </span>
                 <h1 className={`${s.heroH1} ${s.reveal}`}>
                   Grind the papers.<br />Climb the <em>rank.</em><br />Crack JEE.
@@ -157,9 +194,9 @@ export default function LandingPage() {
                   <span className={s.avstack} aria-hidden="true">
                     <i>AK</i><i>RP</i><i>SM</i><i>+</i>
                   </span>
-                  <span><b>50,000+</b> aspirants grinding</span>
+                  <span><b>{fmtK(totalUsers)}</b> aspirants grinding</span>
                   <span className={s.flairSep} />
-                  <span><b>3,210</b> problems live</span>
+                  <span><b>{fmt(totalQuestions)}</b> problems live</span>
                 </div>
               </div>
 
@@ -220,9 +257,9 @@ export default function LandingPage() {
         <section className={s.stats}>
           <div className={s.wrap}>
             <div className={s.statsGrid}>
-              <div className={`${s.stat} ${s.reveal}`}><div className={s.statNum}><em>3,210</em></div><div className={s.statLbl}>PYQ problems, every one solved &amp; explained</div></div>
-              <div className={`${s.stat} ${s.reveal}`}><div className={s.statNum}>12</div><div className={s.statLbl}>years of JEE Main &amp; Advanced papers</div></div>
-              <div className={`${s.stat} ${s.reveal}`}><div className={s.statNum}>50<em>k</em>+</div><div className={s.statLbl}>aspirants on the leaderboard</div></div>
+              <div className={`${s.stat} ${s.reveal}`}><div className={s.statNum}><em>{fmt(totalQuestions)}</em></div><div className={s.statLbl}>PYQ problems, every one solved &amp; explained</div></div>
+              <div className={`${s.stat} ${s.reveal}`}><div className={s.statNum}>{yearsSpan}</div><div className={s.statLbl}>years of JEE Main &amp; Advanced papers ({minYear}–{maxYear})</div></div>
+              <div className={`${s.stat} ${s.reveal}`}><div className={s.statNum}>{totalUsers >= 1000 ? <>{Math.floor(totalUsers / 1000)}k<em>+</em></> : totalUsers}</div><div className={s.statLbl}>aspirants on the leaderboard</div></div>
               <div className={`${s.stat} ${s.reveal}`}><div className={s.statNum}>Weekly</div><div className={s.statLbl}>timed contests &amp; rank battles</div></div>
             </div>
           </div>
@@ -245,7 +282,7 @@ export default function LandingPage() {
                 <div className={s.stepN}>01</div>
                 <div className={s.stepIco}><ListIcon /></div>
                 <h3>Pick a PYQ</h3>
-                <p>Filter 3,210 problems by subject, chapter, year, or difficulty — or just hit the daily pick and start the timer.</p>
+                <p>Filter {fmt(totalQuestions)} problems by subject, chapter, year, or difficulty — or just hit the daily pick and start the timer.</p>
               </div>
               <div className={`${s.step} ${s.reveal}`}>
                 <div className={s.stepN}>02</div>
@@ -276,33 +313,21 @@ export default function LandingPage() {
               </p>
             </div>
             <div className={s.subjGrid}>
-              <a href="/app?tab=sets" className={`${s.subj} ${s.reveal}`} style={{ "--sc": "var(--phy)", textDecoration: "none", color: "inherit" } as React.CSSProperties}>
-                <div className={s.subjIco}><PhysicsIcon /></div>
-                <h3>Physics</h3>
-                <div className={s.subjMeta}>14 chapters · 230 problems</div>
-                <div className={s.subjChaps}>
-                  <span>Kinematics</span><span>Rotational Motion</span><span>Electrostatics</span><span>Modern Physics</span>
-                  <span className={s.subjMore}>+10 more</span>
-                </div>
-              </a>
-              <a href="/app?tab=sets" className={`${s.subj} ${s.reveal}`} style={{ "--sc": "var(--chem)", textDecoration: "none", color: "inherit" } as React.CSSProperties}>
-                <div className={s.subjIco}><FlaskIcon /></div>
-                <h3>Chemistry</h3>
-                <div className={s.subjMeta}>14 chapters · 240 problems</div>
-                <div className={s.subjChaps}>
-                  <span>Chemical Bonding</span><span>Equilibrium</span><span>GOC</span><span>Carbonyl Compounds</span>
-                  <span className={s.subjMore}>+10 more</span>
-                </div>
-              </a>
-              <a href="/app?tab=sets" className={`${s.subj} ${s.reveal}`} style={{ "--sc": "var(--math)", textDecoration: "none", color: "inherit" } as React.CSSProperties}>
-                <div className={s.subjIco}><MathIcon /></div>
-                <h3>Maths</h3>
-                <div className={s.subjMeta}>14 chapters · 180 problems</div>
-                <div className={s.subjChaps}>
-                  <span>Integration</span><span>Conic Sections</span><span>Probability</span><span>Vectors</span>
-                  <span className={s.subjMore}>+10 more</span>
-                </div>
-              </a>
+              {[
+                { key: "phy", label: "Physics", sc: "var(--phy)", icon: <PhysicsIcon />, stats: phy },
+                { key: "chem", label: "Chemistry", sc: "var(--chem)", icon: <FlaskIcon />, stats: chem },
+                { key: "math", label: "Maths", sc: "var(--math)", icon: <MathIcon />, stats: math },
+              ].map(({ key, label, sc, icon, stats }) => (
+                <a key={key} href="/app?tab=sets" className={`${s.subj} ${s.reveal}`} style={{ "--sc": sc, textDecoration: "none", color: "inherit" } as React.CSSProperties}>
+                  <div className={s.subjIco}>{icon}</div>
+                  <h3>{label}</h3>
+                  <div className={s.subjMeta}>{stats.chapters} chapters · {fmt(stats.problems)} problems</div>
+                  <div className={s.subjChaps}>
+                    {stats.topChapters.map(ch => <span key={ch}>{ch}</span>)}
+                    {stats.chapters > 4 && <span className={s.subjMore}>+{stats.chapters - 4} more</span>}
+                  </div>
+                </a>
+              ))}
             </div>
           </div>
         </section>
@@ -316,7 +341,7 @@ export default function LandingPage() {
                 Where you really <em style={{ fontStyle: "italic", color: "var(--accent)" }}>stand.</em>
               </h2>
               <p style={{ fontSize: 17, color: "var(--fg-2)", margin: 0, lineHeight: 1.55 }}>
-                Solving in a vacuum is easy. Solving against 50,000 other aspirants — on the clock, ranked live — is what gets you exam-ready.
+                Solving in a vacuum is easy. Solving against {fmtK(totalUsers)} other aspirants — on the clock, ranked live — is what gets you exam-ready.
               </p>
             </div>
             <div className={s.competeGrid}>
